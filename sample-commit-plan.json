@@ -1,0 +1,12 @@
+{
+  "commits": [
+    {
+      "date": "2026-07-03T18:22:00+01:00",
+      "message": "feat(auth): ajout des permissions\n\nAjout du middleware de vérification des permissions afin de centraliser le contrôle d'accès.",
+      "files": [
+        "app/Models/User.php",
+        "routes/web.php"
+      ]
+    }
+  ]
+}
