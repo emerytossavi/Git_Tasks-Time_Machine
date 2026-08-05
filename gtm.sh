@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PLAN_FILE="commit-plan.json"
+PLAN_FILE="${2:-commit-plan.json}"
 
 # Variables globales chargées depuis le plan
 PLAN_DATES=()
@@ -397,9 +397,13 @@ EOF
 }
 
 main() {
-  if [[ $# -ne 1 ]]; then
+  if [[ $# -lt 1 || $# -gt 2 ]]; then
     cat <<USAGE
-Usage: ./gtm.sh <validate|dry-run|run>
+Usage: gtm <validate|dry-run|run> [chemin/vers/plan.json]
+
+Si le chemin du plan est omis, "./commit-plan.json" (relatif au
+dossier courant) est utilisé. "run" et "dry-run" opèrent toujours
+sur le dépôt Git du dossier courant.
 USAGE
     exit 1
   fi
