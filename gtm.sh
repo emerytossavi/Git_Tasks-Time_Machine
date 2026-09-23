@@ -100,10 +100,11 @@ print_report() {
 _expand_pattern() {
     local pattern="$1"
     local _old_nullglob
+    local IFS=$'\n'
     _old_nullglob=$(shopt -p nullglob 2>/dev/null || true)
 
     shopt -s nullglob
-    # SC2206: intentional word-splitting for glob expansion
+    # SC2206: intentional word-splitting for glob expansion; keep spaces in paths
     # shellcheck disable=SC2206
     matches=($pattern)
 
