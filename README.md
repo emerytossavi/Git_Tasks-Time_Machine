@@ -66,6 +66,7 @@ gtm run   # équivalent à: gtm run ./commit-plan.json
 
 ```text
 git-helpers/
+├── config.env                # configuration (URL du dépôt distant)
 ├── gtm.sh                    # le script
 ├── install.sh                # installation globale (voir ci-dessus)
 ├── sample-commit-plan.json   # exemple de plan
@@ -149,6 +150,22 @@ Pour chaque commit du plan :
 Le message est injecté via heredoc pour conserver les retours à la ligne.
 
 Si aucun changement n'est indexé pour une entrée, un avertissement est affiché et le script passe au commit suivant.
+
+### 4) Mise à jour du programme
+
+```bash
+gtm update
+# ou
+gtm --update
+# ou alias rapides :
+gtm -update
+gtm --u
+gtm -u
+```
+
+Met à jour `gtm` directement depuis le dépôt public configuré dans `config.env` (`REPO_URL`).
+- Si le script réside dans un dépôt cloné : effectue un `git pull` fast-forward.
+- Sinon (ou en cas d'échec git) : télécharge automatiquement la dernière version du script via `curl` ou `wget`.
 
 ## Exemple complet
 

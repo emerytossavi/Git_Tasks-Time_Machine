@@ -3,7 +3,35 @@
 # Compatible: bash 3.2+ (macOS), bash 4/5 (Linux), Git Bash (Windows)
 set -euo pipefail
 
+# Resolve the actual script location (follow symlinks, cross-platform bash 3.2+)
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -h "$SOURCE" ]]; do
+    TARGET="$(readlink "$SOURCE")"
+    if [[ "$TARGET" == /* ]]; then
+        SOURCE="$TARGET"
+    else
+        SOURCE="$(dirname "$SOURCE")/$TARGET"
+    fi
+done
+GTM_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+GTM_FILE="$GTM_DIR/$(basename "$SOURCE")"
+
+# Load default remote repo configuration if available
+DEFAULT_REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
+DEFAULT_RAW_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
+DEFAULT_BRANCH="main"
+
+if [[ -f "$GTM_DIR/config.env" ]]; then
+    # shellcheck disable=SC1091
+    source "$GTM_DIR/config.env"
+fi
+
+REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
+RAW_FILE_URL="${RAW_FILE_URL:-$DEFAULT_RAW_URL}"
+REPO_BRANCH="${REPO_BRANCH:-$DEFAULT_BRANCH}"
+
 PLAN_FILE="${2:-commit-plan.json}"
+
 
 # ---------------------------------------------------------------------------
 # Cross-platform ISO 8601 date parsing
@@ -299,10 +327,76 @@ EOF
     done < <(jq -c '.commits[]' "$PLAN_FILE")
 }
 
+update_gtm() {
+    print_report "INFO" "Vérification des mises à jour pour Git Tasks-Time Machine..."
+    print_report "INFO" "Dépôt distant : $REPO_URL"
+    print_report "INFO" "Emplacement local : $GTM_DIR"
+
+    # Vérification si le script fait partie d'un clone Git local
+    if git -C "$GTM_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        print_report "INFO" "Mise à jour via Git..."
+
+        # Tirer directement depuis l'URL publique avec fast-forward pour éviter tout blocage SSH/prompt
+        if GIT_TERMINAL_PROMPT=0 git -C "$GTM_DIR" pull --ff-only "$REPO_URL" "$REPO_BRANCH" 2>/dev/null || \
+           GIT_TERMINAL_PROMPT=0 git -C "$GTM_DIR" pull --ff-only 2>/dev/null; then
+            chmod +x "$GTM_FILE" 2>/dev/null || true
+            print_report "OK" "Git Tasks-Time Machine a été mis à jour avec succès via Git !"
+            return 0
+        else
+            print_report "WARN" "Impossible d'effectuer un git pull --ff-only direct. Tentative de téléchargement direct..."
+        fi
+    fi
+
+    # Fallback si ce n'est pas un repo git ou si git pull a échoué
+    print_report "INFO" "Téléchargement de la dernière version ($RAW_FILE_URL)..."
+    local tmp_file
+    tmp_file="$(mktemp "${TMPDIR:-/tmp}/gtm.sh.XXXXXX")"
+
+    local download_ok=1
+    if command -v curl >/dev/null 2>&1; then
+        if curl -fsSL "$RAW_FILE_URL" -o "$tmp_file"; then
+            download_ok=0
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget -qO "$tmp_file" "$RAW_FILE_URL"; then
+            download_ok=0
+        fi
+    else
+        print_report "ERROR" "Ni 'curl' ni 'wget' n'est installé pour télécharger la mise à jour."
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    if [[ $download_ok -eq 0 && -s "$tmp_file" ]]; then
+        # Télécharger également config.env s'il n'existe pas localement
+        local raw_config_url
+        raw_config_url="$(dirname "$RAW_FILE_URL")/config.env"
+        if [[ ! -f "$GTM_DIR/config.env" ]]; then
+            curl -fsSL "$raw_config_url" -o "$GTM_DIR/config.env" 2>/dev/null || true
+        fi
+
+        mv "$tmp_file" "$GTM_FILE"
+        chmod +x "$GTM_FILE"
+        print_report "OK" "Git Tasks-Time Machine a été mis à jour avec succès !"
+    else
+        rm -f "$tmp_file"
+        print_report "ERROR" "Échec du téléchargement de la mise à jour depuis $RAW_FILE_URL"
+        return 1
+    fi
+}
+
 main() {
     if [[ $# -lt 1 || $# -gt 2 ]]; then
         cat <<USAGE
 Usage: gtm <validate|dry-run|run> [chemin/vers/plan.json]
+       gtm <update|--update|-update|--u|-u>
+
+Commandes :
+  validate [plan.json]  Vérifie la conformité du plan JSON.
+  dry-run  [plan.json]  Simule l'exécution sans toucher à Git.
+  run      [plan.json]  Exécute les commits du plan dans le dépôt courant.
+  update                Met à jour Git Tasks-Time Machine depuis le dépôt public.
+                        (Alias acceptés : --update, -update, --u, -u)
 
 Si le chemin du plan est omis, "./commit-plan.json" (relatif au
 dossier courant) est utilisé. "run" et "dry-run" opèrent toujours
@@ -315,6 +409,9 @@ USAGE
     _detect_date_cmd
 
     case "$1" in
+        update|--update|-update|--u|-u)
+            update_gtm
+            ;;
         validate)
             validate_plan
             ;;
@@ -326,7 +423,7 @@ USAGE
             ;;
         *)
             print_report "ERROR" "Commande inconnue: $1"
-            print_report "INFO" "Commandes disponibles: validate, dry-run, run"
+            print_report "INFO" "Commandes disponibles: validate, dry-run, run, update (--u, -update)"
             exit 1
             ;;
     esac
