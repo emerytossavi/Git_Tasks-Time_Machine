@@ -111,6 +111,28 @@ Git_Tasks-Time_Machine/
 
 ## Commandes disponibles
 
+### 0) Génération assistée par SLM local (Sobriété énergétique)
+
+```bash
+gtm plan [options] [chemin/vers/plan.json]
+```
+
+Explore les fichiers du dossier courant, extrait les dépendances/liaisons structurelles et fait appel au SLM local sobre (**Qwen2.5-Coder 1.5B** via Ollama) pour structurer automatiquement un historique de commits cohérent (avec Conventional Commits et dates ISO 8601 réalistes).
+
+Options disponibles :
+- `-a` ou `--all` : analyse tous les fichiers du dossier (au lieu de se limiter aux modifications `git status`).
+- `--dry-run` : affiche le plan généré dans le terminal sans créer de fichier.
+- `--start-date YYYY-MM-DDTHH:MM:SS` : spécifie une date de départ pour les commits (les dates sont calculées chronologiquement pendant les heures ouvrées).
+- `-m` ou `--model` : sélectionne un modèle Ollama alternatif (défaut : `qwen2.5-coder:1.5b`).
+
+```bash
+# Exemple : générer commit-plan.json pour tous les fichiers du dossier
+gtm plan -a
+
+# Exemple : simuler la génération pour les fichiers modifiés récemment
+gtm plan --dry-run
+```
+
 ### 1) Validation seule
 
 ```bash
