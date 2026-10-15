@@ -44,15 +44,17 @@ config_set_plan_file "${2:-commit-plan.json}"
 
 show_usage() {
     cat <<USAGE
-Usage: gtm <validate|dry-run|run> [chemin/vers/plan.json]
+Usage: gtm <plan|validate|dry-run|run> [options] [chemin/vers/plan.json]
        gtm <update|--update|-update|--u|-u>
 
 Commandes :
-  validate [plan.json]  Vérifie la conformité du plan JSON.
-  dry-run  [plan.json]  Simule l'exécution sans toucher à Git.
-  run      [plan.json]  Exécute les commits du plan dans le dépôt courant.
-  update                Met à jour Git Tasks-Time Machine depuis le dépôt public.
-                        (Alias acceptés : --update, -update, --u, -u)
+  plan     [options] [plan.json] Génère automatiquement un plan de commits via le SLM local (Qwen2.5-Coder).
+                                 Options : -a/--all, --dry-run, --start-date YYYY-MM-DD, -m/--model
+  validate [plan.json]           Vérifie la conformité du plan JSON.
+  dry-run  [plan.json]           Simule l'exécution sans toucher à Git.
+  run      [plan.json]           Exécute les commits du plan dans le dépôt courant.
+  update                         Met à jour Git Tasks-Time Machine depuis le dépôt public.
+                                 (Alias acceptés : --update, -update, --u, -u)
 
 Si le chemin du plan est omis, "./commit-plan.json" (relatif au
 dossier courant) est utilisé. "run" et "dry-run" opèrent toujours
@@ -61,30 +63,41 @@ USAGE
 }
 
 main() {
-    if [[ $# -lt 1 || $# -gt 2 ]]; then
+    if [[ $# -lt 1 ]]; then
         show_usage
         exit 1
     fi
 
-    # Détection cross-platform de la commande de date
-    date_init_engine
-
     case "$1" in
+        plan)
+            shift
+            if ! command -v python3 >/dev/null 2>&1; then
+                log_error "Python 3 est requis pour la génération de plan avec le SLM local."
+                exit 1
+            fi
+            python3 "$GTM_DIR/lib/planner.py" "$@"
+            ;;
         update|--update|-update|--u|-u)
             updater_run
             ;;
         validate)
+            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            date_init_engine
             validator_validate_plan "$PLAN_FILE"
             ;;
         dry-run)
+            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            date_init_engine
             runner_dry_run "$PLAN_FILE"
             ;;
         run)
+            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            date_init_engine
             runner_run "$PLAN_FILE"
             ;;
         *)
             log_error "Commande inconnue: $1"
-            log_info "Commandes disponibles: validate, dry-run, run, update (--u, -update)"
+            log_info "Commandes disponibles: plan, validate, dry-run, run, update (--u, -update)"
             exit 1
             ;;
     esac
