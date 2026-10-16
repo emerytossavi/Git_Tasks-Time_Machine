@@ -65,9 +65,18 @@ gtm run   # équivalent à: gtm run ./commit-plan.json
 ## Structure de ce dépôt
 
 ```text
-git-helpers/
+Git_Tasks-Time_Machine/
+├── gtm.sh                    # point d'entrée principal (orchestrateur)
+├── lib/                      # modules spécialisés
+│   ├── config.sh             # configuration & chemins
+│   ├── logger.sh             # affichages et logging
+│   ├── date.sh               # parsing ISO 8601 & conversions epoch cross-platform
+│   ├── fs.sh                 # compatibilité bash 3.2 & expansion globs
+│   ├── git.sh                # abstraction des commandes Git
+│   ├── validator.sh          # validation de la structure et chronologie du plan
+│   ├── runner.sh             # exécution des plans (dry-run et run)
+│   └── updater.sh            # mise à jour automatique
 ├── config.env                # configuration (URL du dépôt distant)
-├── gtm.sh                    # le script
 ├── install.sh                # installation globale (voir ci-dessus)
 ├── sample-commit-plan.json   # exemple de plan
 ├── README.md

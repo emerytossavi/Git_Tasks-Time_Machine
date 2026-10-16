@@ -14,6 +14,7 @@ if [[ ! -f "$GTM_SRC" ]]; then
 fi
 
 chmod +x "$GTM_SRC"
+chmod +x "$REPO_DIR"/lib/*.sh 2>/dev/null || true
 
 # Choix du dossier bin : celui déjà présent et déjà dans le PATH est
 # préféré, sinon ~/.local/bin (convention Linux), sinon ~/bin (Git Bash).
