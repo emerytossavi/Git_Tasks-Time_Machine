@@ -1,4 +1,6 @@
 .gitignore
 .claude/
 
-./commit-plan.json
+commit-plan.json
+__pycache__/
+*.pyc

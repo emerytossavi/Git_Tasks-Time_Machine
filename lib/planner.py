@@ -16,10 +16,10 @@ from datetime import datetime, timedelta, time
 from pathlib import Path
 import random
 
-DEFAULT_IGNORES = {
-    ".git", ".svn", ".hg", "node_modules", "vendor", "__pycache__",
-    ".venv", "env", ".cache", "dist", "build", ".DS_Store",
-    "commit-plan.json", ".idea", ".vscode"
+SYSTEM_EXCLUDES = {
+    ".git",
+    ".DS_Store",
+    "commit-plan.json"
 }
 
 BINARY_EXTENSIONS = {
@@ -27,6 +27,15 @@ BINARY_EXTENSIONS = {
     ".zip", ".tar", ".gz", ".7z", ".exe", ".bin", ".dylib", ".so", ".a",
     ".mp3", ".mp4", ".mov", ".avi", ".woff", ".woff2", ".ttf", ".eot"
 }
+
+def is_system_excluded(rel_path: str) -> bool:
+    """Vérifie si un chemin fait partie des exclusions système indispensables (.git, commit-plan.json, .DS_Store)."""
+    p = Path(rel_path)
+    if any(part == ".git" for part in p.parts):
+        return True
+    if p.name == ".DS_Store" or p.name == "commit-plan.json":
+        return True
+    return False
 
 def is_text_file(filepath: Path) -> bool:
     if filepath.suffix.lower() in BINARY_EXTENSIONS:
@@ -42,6 +51,7 @@ def get_git_status_files(cwd: Path):
     """Retourne la liste des fichiers modifiés ou non suivis selon git status (y compris dans les sous-dossiers)."""
     try:
         # -uall garantit que les fichiers dans les sous-dossiers non suivis sont tous listés individuellement
+        # Git applique automatiquement l'ensemble des règles .gitignore du projet.
         cmd = ["git", "status", "--porcelain", "-uall"]
         res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, check=True)
         files = []
@@ -55,23 +65,66 @@ def get_git_status_files(cwd: Path):
                 if " -> " in path_str:
                     path_str = path_str.split(" -> ")[1]
                 path_clean = path_str.strip('"')
-                p = cwd / path_clean
-                if p.name in DEFAULT_IGNORES or p.name == ".DS_Store" or path_clean == "commit-plan.json" or path_clean.startswith(".git"):
+                if is_system_excluded(path_clean):
                     continue
-                if p.is_file():
+                p = cwd / path_clean
+                if p.is_file() and is_text_file(p):
                     files.append(str(p.relative_to(cwd)))
                 elif p.is_dir():
-                    # Sécurité : si une entrée est un dossier, parcourir récursivement
+                    # Sécurité : si une entrée non suivie est un dossier brut
                     for root, _, filenames in os.walk(p):
                         for fn in filenames:
-                            if fn in DEFAULT_IGNORES or fn == ".DS_Store":
-                                continue
                             sub_p = Path(root) / fn
-                            if is_text_file(sub_p):
-                                files.append(str(sub_p.relative_to(cwd)))
+                            rel_sub = str(sub_p.relative_to(cwd))
+                            if not is_system_excluded(rel_sub) and is_text_file(sub_p):
+                                files.append(rel_sub)
         return files
     except Exception:
         return []
+
+def get_all_git_files(cwd: Path):
+    """Retourne tous les fichiers du projet en appliquant 100% des règles .gitignore via git ls-files."""
+    try:
+        cmd = ["git", "ls-files", "--cached", "--others", "--exclude-standard"]
+        res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, check=True)
+        files = []
+        for line in res.stdout.splitlines():
+            line = line.strip().strip('"')
+            if not line or is_system_excluded(line):
+                continue
+            p = cwd / line
+            if p.is_file() and is_text_file(p) and p.stat().st_size < 500 * 1024:
+                files.append(line)
+        return files
+    except Exception:
+        return []
+
+def parse_gitignore(cwd: Path) -> list:
+    """Lit les motifs d'exclusion d'un fichier .gitignore s'il existe (fallback hors dépôt Git)."""
+    gitignore_path = cwd / ".gitignore"
+    patterns = []
+    if gitignore_path.is_file():
+        try:
+            with open(gitignore_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        patterns.append(line)
+        except Exception:
+            pass
+    return patterns
+
+def matches_gitignore(rel_path: str, patterns: list) -> bool:
+    """Vérifie si un chemin relatif correspond à l'un des motifs .gitignore."""
+    from fnmatch import fnmatch
+    p = Path(rel_path)
+    for pat in patterns:
+        pat_clean = pat.rstrip("/")
+        if fnmatch(rel_path, pat_clean) or fnmatch(p.name, pat_clean):
+            return True
+        if any(fnmatch(part, pat_clean) for part in p.parts):
+            return True
+    return False
 
 def scan_directory(cwd: Path, all_files=False):
     """Scanne le dossier courant et sélectionne les fichiers pertinents dans toute l'arborescence."""
@@ -80,22 +133,23 @@ def scan_directory(cwd: Path, all_files=False):
         if git_files:
             return sorted(set(git_files))
 
+    # 1. Utilisation prioritaire du moteur Git natif (respecte .gitignore racine + sous-dossiers)
+    all_git_files = get_all_git_files(cwd)
+    if all_git_files:
+        return sorted(set(all_git_files))
+
+    # 2. Fallback si hors dépôt Git : lecture directe du .gitignore local + os.walk
+    patterns = parse_gitignore(cwd)
     selected = []
     for root, dirs, files in os.walk(cwd):
-        dirs[:] = [d for d in dirs if d not in DEFAULT_IGNORES and not d.startswith(".")]
-        rel_root = Path(root).relative_to(cwd)
-        if any(part in DEFAULT_IGNORES for part in rel_root.parts):
-            continue
-
+        dirs[:] = [d for d in dirs if not is_system_excluded(d) and not matches_gitignore(d, patterns)]
         for f in files:
-            if f in DEFAULT_IGNORES or f.startswith("."):
-                continue
             p = Path(root) / f
-            rel_p = p.relative_to(cwd)
-            if str(rel_p) == "commit-plan.json":
+            rel_p = str(p.relative_to(cwd))
+            if is_system_excluded(rel_p) or matches_gitignore(rel_p, patterns):
                 continue
             if is_text_file(p) and p.stat().st_size < 500 * 1024:
-                selected.append(str(rel_p))
+                selected.append(rel_p)
 
     return sorted(set(selected))
 
@@ -123,7 +177,28 @@ def extract_file_intent(cwd: Path, rel_path: str) -> str:
     except Exception:
         pass
 
-    # 2. Pour les nouveaux fichiers ou sans diff : extraire docstrings ou commentaires de tête
+    # 2. Détection d'intention spécifique pour Docker, CI, build, config et docs
+    name_lower = full_path.name.lower()
+    ext_lower = full_path.suffix.lower()
+    rel_lower = rel_path.lower()
+
+    if "docker" in rel_lower or name_lower.startswith("dockerfile") or name_lower.startswith(".dockerignore"):
+        if name_lower.startswith(".dockerignore"):
+            return "define build context exclusions for container packaging"
+        elif "entrypoint" in name_lower or ext_lower in (".sh", ".bash"):
+            return "manage container runtime startup and entrypoint initialization"
+        elif name_lower.startswith("docker-compose"):
+            return "orchestrate multi-container services and network environment"
+        else:
+            return "configure container build environment and runtime image"
+    elif name_lower == ".gitignore":
+        return "configure repository ignore rules for untracked files"
+    elif name_lower in ("readme.md", "readme"):
+        return "provide project documentation, architecture overview and usage guides"
+    elif name_lower in ("license", "license.md"):
+        return "define software license and distribution terms"
+
+    # 3. Pour les nouveaux fichiers de code : extraire docstrings ou signatures de fonctions
     doc_lines = []
     in_block = False
     symbols = []
@@ -178,23 +253,44 @@ def extract_file_intent(cwd: Path, rel_path: str) -> str:
     elif symbols:
         return f"implements {', '.join(symbols[:3])}"
     
-    return "core implementation"
+    return "implement core functionality"
+
+def categorize_file(rel_path: str):
+    """Détermine le type Conventional Commit, le scope recommandé et la catégorie logique du fichier."""
+    p = Path(rel_path)
+    name = p.name.lower()
+    ext = p.suffix.lower()
+    rel_lower = rel_path.lower()
+
+    if "docker" in rel_lower or name.startswith("dockerfile") or name.startswith(".dockerignore"):
+        return {"type": "build", "scope": "docker", "category": "docker"}
+    if ".github" in rel_lower or ".gitlab" in rel_lower or "jenkins" in rel_lower or "circleci" in rel_lower:
+        return {"type": "ci", "scope": "ci", "category": "ci"}
+    if name in ["package.json", "package-lock.json", "pom.xml", "build.gradle", "cargo.toml", "requirements.txt", "pyproject.toml", "setup.py", "makefile"]:
+        return {"type": "build", "scope": "deps", "category": "deps"}
+    if "test" in rel_lower or "spec" in rel_lower:
+        return {"type": "test", "scope": "test", "category": "test"}
+    if name in ["readme.md", "license", "contributing.md", "changelog.md"] or ext in [".md", ".txt"] or rel_lower.startswith("docs/"):
+        return {"type": "docs", "scope": "docs", "category": "docs"}
+    if name.startswith(".env") or ext in [".json", ".yaml", ".yml", ".toml", ".ini", ".conf", ".env"]:
+        return {"type": "chore", "scope": "config", "category": "config"}
+    if ext in [".sh", ".bash", ".zsh"]:
+        return {"type": "chore", "scope": "cli" if "gtm" in rel_lower or "cli" in rel_lower else "scripts", "category": "scripts"}
+    
+    # Code applicatif : déduire le scope du répertoire ou du fichier
+    if len(p.parts) > 1:
+        scope = re.sub(r'^[0-9]+[_\-]*', '', p.parts[0]).lower()
+        scope = re.sub(r'[^a-zA-Z0-9_\-]', '', scope) or "core"
+    else:
+        scope = p.stem.lower()
+        scope = re.sub(r'^[0-9]+[_\-]*', '', scope)
+        scope = re.sub(r'[^a-zA-Z0-9_\-]', '', scope) or "core"
+    return {"type": "feat", "scope": scope, "category": scope}
 
 def analyze_file(cwd: Path, rel_path: str):
     """Analyse légère: extrait les imports, définitions clés, rôle et intention sémantique."""
     full_path = cwd / rel_path
-    ext = full_path.suffix.lower()
-    name = full_path.name.lower()
-    
-    role = "code"
-    if "test" in rel_path.lower() or "spec" in rel_path.lower():
-        role = "test"
-    elif name in ["readme.md", "license", "contributing.md", "changelog.md"] or ext in [".md", ".txt"]:
-        role = "documentation"
-    elif name.startswith(".env") or ext in [".json", ".yaml", ".yml", ".toml", ".ini", ".conf", ".env"]:
-        role = "configuration"
-    elif ext in [".sh", ".bash", ".zsh"]:
-        role = "script/cli"
+    cat = categorize_file(rel_path)
 
     symbols = []
     imports = []
@@ -221,7 +317,10 @@ def analyze_file(cwd: Path, rel_path: str):
 
     return {
         "path": rel_path,
-        "role": role,
+        "type": cat["type"],
+        "scope": cat["scope"],
+        "category": cat["category"],
+        "role": cat["type"],
         "intent": intent,
         "symbols": symbols[:4],
         "imports": imports[:5]
@@ -251,22 +350,37 @@ def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b
     example_id = "[1, 2]" if is_modular else "[1, 2]"
 
     system_prompt = (
-        "You are a senior tech lead and Git commit architect.\n"
-        "Your task is to organize the numbered items into 3 to 8 logical, coherent Conventional Commits by their integer IDs in '" + id_key + "'.\n\n"
-        "CRITICAL COMMIT MESSAGE RULES:\n"
+        "You are an expert Git commit architect adhering strictly to Conventional Commits v1.0.0 and @commitlint/config-conventional rules.\n"
+        "Your task is to organize the numbered items into logical, atomic commits using their integer IDs in '" + id_key + "'.\n\n"
+        "CRITICAL CONVENTIONAL COMMITS & COMMITLINT SPECIFICATIONS:\n"
         "1. Every ID from 1 to N MUST be included in exactly one commit in '" + id_key + "'.\n"
-        "2. NEVER mention filenames, file extensions, or raw file paths in the commit message or scope.\n"
-        "   - FORBIDDEN: 'feat(lib/planner.py): add planner.py'\n"
-        "   - FORBIDDEN: 'feat(auth): add AuthService.php'\n"
-        "3. The <scope> MUST be a conceptual domain (e.g. auth, api, cli, formalites, consultation, config, docs, core).\n"
-        "4. The <summary> MUST describe the functional ACTION and INTENT in imperative mood:\n"
-        "   - EXAMPLE: 'feat(auth): add Google OAuth method to registration flow'\n"
-        "   - EXAMPLE: 'feat(api): add business formality write endpoints for companies'\n"
-        "   - EXAMPLE: 'fix(scanner): support recursive subdirectory scanning in git status'\n"
-        "5. Output strictly a JSON object matching this schema:\n"
+        "2. ALLOWED TYPES (type-enum):\n"
+        "   - 'feat': user-facing new feature or capability\n"
+        "   - 'fix': bug fix or corrective behavior\n"
+        "   - 'build': changes affecting build system, packaging, external dependencies, or containerization (Docker, npm, maven)\n"
+        "   - 'ci': changes to CI/CD workflows and scripts (GitHub Actions, pipelines)\n"
+        "   - 'docs': documentation only (README, API docs, licenses)\n"
+        "   - 'refactor': code change that neither fixes a bug nor adds a feature\n"
+        "   - 'test': adding or updating test suites\n"
+        "   - 'chore': maintenance, tooling, configuration files\n"
+        "3. SCOPES (scope-case):\n"
+        "   - MUST be in lower-case (e.g. docker, auth, api, cli, config, deps, docs)\n"
+        "   - FORBIDDEN SCOPES: NEVER use 'code', 'file', 'files', 'all', or empty/generic scopes.\n"
+        "4. ATOMIC COHERENCE:\n"
+        "   - Group all related files that form a single logical unit of work into ONE commit (e.g. Dockerfile + .dockerignore + entrypoint MUST be in a single 'build(docker)' commit).\n"
+        "5. SUBJECT LINE RULES (subject-case, subject-full-stop, imperative-mood):\n"
+        "   - Format: '<type>(<scope>): <subject>'\n"
+        "   - MUST start with a LOWER-CASE imperative verb: add, configure, setup, implement, update, remove, fix (NOT 'added', NOT 'Configure').\n"
+        "   - MUST NOT end with a period ('.').\n"
+        "   - STRICTLY FORBIDDEN: NEVER write 'add <filename>' or repeat file paths/extensions (e.g. FORBIDDEN: 'add Dockerfile', 'add .dockerignore', 'add main.py').\n"
+        "   - Describe the actual technical ACTION and INTENT.\n"
+        "     * CORRECT: 'build(docker): configure multi-stage container build and startup entrypoint'\n"
+        "     * CORRECT: 'feat(auth): implement Google OAuth registration flow'\n"
+        "     * CORRECT: 'docs(readme): add installation guide and usage examples'\n"
+        "6. Output strictly a JSON object matching this schema:\n"
         "{\n"
         '  "commits": [\n'
-        '    {"message": "<type>(<scope>): <action summary>\\n\\n<short rationale>", "' + id_key + '": ' + example_id + '}\n'
+        '    {"message": "<type>(<scope>): <action summary>", "' + id_key + '": ' + example_id + '}\n'
         "  ]\n"
         "}"
     )
@@ -400,24 +514,109 @@ def assign_timestamps(commits, cwd: Path, start_date=None, strategy="last"):
 
     return sorted_commits
 
-def sanitize_commit_message(msg: str) -> str:
-    """Nettoie le message pour retirer tout nom de fichier ou extension résiduel du scope."""
-    def clean_scope(m):
+ALLOWED_CONVENTIONAL_TYPES = {
+    "feat", "fix", "build", "ci", "docs", "style", "refactor", "perf", "test", "chore", "revert"
+}
+
+def sanitize_commit_message(msg: str, commit_files: list = None) -> str:
+    """
+    Nettoie et normalise le message selon la spécification @commitlint/config-conventional:
+    - type-enum : validation parmi les types officiels
+    - scope-case : minuscules, suppression des extensions et des scopes interdits ('code', 'file', etc.)
+    - subject-case : première lettre en minuscule
+    - subject-full-stop : suppression de tout point final
+    - élimination de l'anti-pattern 'add <fichier>'
+    """
+    msg = msg.strip()
+    lines = msg.split("\n", 1)
+    subject = lines[0].strip()
+    body = ("\n" + lines[1]) if len(lines) > 1 else ""
+
+    m = re.match(r'^([a-zA-Z]+)(?:\(([^)]+)\))?\s*:\s*(.*)', subject)
+    if m:
         type_part = m.group(1).lower()
-        raw_scope = m.group(2).strip()
-        rest = m.group(3)
-        scope_name = Path(raw_scope).stem
+        scope_part = (m.group(2) or "").strip().lower()
+        rest = m.group(3).strip()
+    else:
+        type_part = "feat"
+        scope_part = ""
+        rest = subject
+
+    if type_part not in ALLOWED_CONVENTIONAL_TYPES:
+        type_part = "feat"
+
+    # Inférence automatique du type et du scope si tous les fichiers partagent un même domaine
+    if commit_files:
+        all_docker = all("docker" in f.lower() or Path(f).name.lower().startswith(("dockerfile", ".dockerignore")) for f in commit_files)
+        all_docs = all(any(x in f.lower() for x in ["readme", "license", "contributing", "doc"]) for f in commit_files)
+        all_tests = all("test" in f.lower() or "spec" in f.lower() for f in commit_files)
+        all_ci = all(".github" in f.lower() or ".gitlab" in f.lower() or "ci" in f.lower() for f in commit_files)
+
+        if all_docker:
+            type_part = "build"
+            scope_part = "docker"
+        elif all_docs:
+            type_part = "docs"
+            scope_part = "docs" if not scope_part or scope_part in ("core", "code") else scope_part
+        elif all_tests:
+            type_part = "test"
+            scope_part = "test" if not scope_part or scope_part in ("core", "code") else scope_part
+        elif all_ci:
+            type_part = "ci"
+            scope_part = "ci"
+
+    # Nettoyage du scope
+    if scope_part:
+        scope_name = Path(scope_part).stem
         if "/" in scope_name or "\\" in scope_name:
             scope_name = Path(scope_name).name
-        # Retirer les préfixes numériques de tri (ex: 01_formalites -> formalites)
         scope_clean = re.sub(r'^[0-9]+[_\-]*', '', scope_name)
         scope_clean = re.sub(r'[^a-zA-Z0-9_\-]', '', scope_clean).lower()
-        if not scope_clean:
-            scope_clean = "core"
-        return f"{type_part}({scope_clean}):{rest}"
+        if scope_clean in ("code", "file", "files", "all", "project", "repo", "misc"):
+            scope_clean = ""
+        scope_part = scope_clean
 
-    cleaned = re.sub(r'^([a-zA-Z]+)\(([^)]+)\):(.*)', clean_scope, msg.strip())
-    return cleaned
+    # Nettoyage du sujet
+    rest = rest.rstrip(".")
+    if " | " in rest:
+        rest = rest.split(" | ")[0].strip()
+
+    # Nettoyage des motifs répétitifs ou mal formulés
+    rest = re.sub(r'^(?:add\s+)?implement core functionality', f'implement {scope_part or "module"} resources', rest, flags=re.IGNORECASE)
+    rest = re.sub(r'^(?:add\s+)?provide project documentation.*', 'add project documentation and usage overview', rest, flags=re.IGNORECASE)
+    rest = re.sub(r'^(?:add\s+)?(?:consultation|formalit[eé])\s*:\s*', '', rest, flags=re.IGNORECASE)
+
+    if rest:
+        rest = rest[0].lower() + rest[1:]
+
+    # S'assurer d'avoir un verbe impératif
+    if not re.match(r'^(?:add|configure|setup|implement|update|remove|fix|refactor|create|define|integrate|orchestrate|support)\b', rest, re.IGNORECASE):
+        rest = f"add {rest}"
+
+    # Correction de l'anti-pattern "add <filename>"
+    if commit_files and re.match(r'^(?:add|added|create|created)\s+[a-zA-Z0-9_\.\-]+(?:\.[a-zA-Z0-9]+)?$', rest.strip(), re.IGNORECASE):
+        if any("docker" in f.lower() for f in commit_files):
+            rest = "configure containerization and startup entrypoint"
+            type_part = "build"
+            scope_part = "docker"
+        elif any(f.endswith(".gitignore") for f in commit_files):
+            rest = "configure repository ignore rules"
+            type_part = "chore"
+        elif any("readme" in f.lower() for f in commit_files):
+            rest = "add documentation and usage overview"
+            type_part = "docs"
+        elif any("test" in f.lower() for f in commit_files):
+            rest = "add automated test cases"
+            type_part = "test"
+        else:
+            rest = f"implement {scope_part or 'core'} functionality"
+
+    if scope_part:
+        formatted = f"{type_part}({scope_part}): {rest}"
+    else:
+        formatted = f"{type_part}: {rest}"
+
+    return formatted + body
 
 def reconcile_and_clean_commits(commits, all_files, cwd: Path):
     """Élimine les doublons, filtre les fichiers hors cible et réconcilie les orphelins."""
@@ -433,7 +632,7 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path):
                 assigned_files.add(f)
         if filtered_files:
             c["files"] = filtered_files
-            c["message"] = sanitize_commit_message(c.get("message", "feat(core): update files"))
+            c["message"] = sanitize_commit_message(c.get("message", "feat(core): update files"), filtered_files)
             cleaned_commits.append(c)
 
     # Réconciliation des orphelins (fichiers ciblés mais non cités par le modèle)
@@ -501,24 +700,35 @@ def main():
         for f in files:
             p = Path(f)
             if len(p.parts) > 1:
-                parent_dir = str(p.parent)
+                # Regrouper au niveau fonctionnel pertinent (max 3 niveaux) pour éviter la sur-fragmentation
+                depth = min(3, len(p.parts) - 1)
+                parent_dir = str(Path(*p.parts[:depth]))
                 groups[parent_dir].append(f)
             else:
-                groups["root"].append(f)
+                cat = analyses_dict.get(f, {}).get("category", "core")
+                groups[f"root/{cat}"].append(f)
 
-        prompt_lines = ["Modules to organize into 3 to 8 logical commits:"]
+        prompt_lines = ["Modules to organize into logical, atomic Conventional Commits:"]
         for idx, (dir_path, g_files) in enumerate(groups.items(), 1):
             id_map[idx] = g_files
-            scope_name = Path(dir_path).name.lower().replace("-", "_") if dir_path != "root" else "core"
-            scope_clean = re.sub(r'[^a-zA-Z0-9_\-]', '', scope_name) or "module"
+            if dir_path.startswith("root/"):
+                scope_clean = dir_path.split("/")[1]
+            else:
+                scope_name = Path(dir_path).name.lower().replace("-", "_")
+                scope_clean = re.sub(r'^[0-9]+[_\-]*', '', scope_name)
+                scope_clean = re.sub(r'[^a-zA-Z0-9_\-]', '', scope_clean) or "module"
+
+            sample_types = [analyses_dict[gf]["type"] for gf in g_files if gf in analyses_dict]
+            primary_type = sample_types[0] if sample_types else "feat"
             sample_intents = [analyses_dict[gf]["intent"] for gf in g_files[:2] if gf in analyses_dict]
-            summary = " | ".join([s for s in sample_intents if s])[:120]
-            prompt_lines.append(f"- Module [{idx}] '{scope_clean}': {len(g_files)} file(s) in {dir_path} ({summary})")
+            clean_intents = [re.sub(r'^(?:changes:\s*|implements\s*)', '', s).strip() for s in sample_intents if s]
+            summary = ", ".join(clean_intents[:2])[:100]
+            prompt_lines.append(f"- Module [{idx}] '{scope_clean}' [type: {primary_type}]: {len(g_files)} file(s) ({summary})")
     else:
-        prompt_lines = ["Files to organize into logical commits:"]
+        prompt_lines = ["Files to organize into logical, atomic Conventional Commits:"]
         for idx, fa in enumerate(analyses, 1):
             id_map[idx] = [fa["path"]]
-            desc = f"[{idx}] {fa['path']} [{fa['role']}]: {fa['intent']}"
+            desc = f"[{idx}] {fa['path']} [type: {fa['type']}, scope: {fa['scope']}]: {fa['intent']}"
             if fa.get("links_to"):
                 desc += f" (links: {', '.join(fa['links_to'])})"
             prompt_lines.append(desc)
