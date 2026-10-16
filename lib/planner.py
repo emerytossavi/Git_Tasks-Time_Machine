@@ -39,9 +39,10 @@ def is_text_file(filepath: Path) -> bool:
         return False
 
 def get_git_status_files(cwd: Path):
-    """Retourne la liste des fichiers modifiés ou non suivis selon git status."""
+    """Retourne la liste des fichiers modifiés ou non suivis selon git status (y compris dans les sous-dossiers)."""
     try:
-        cmd = ["git", "status", "--porcelain"]
+        # -uall garantit que les fichiers dans les sous-dossiers non suivis sont tous listés individuellement
+        cmd = ["git", "status", "--porcelain", "-uall"]
         res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, check=True)
         files = []
         for line in res.stdout.splitlines():
@@ -55,18 +56,29 @@ def get_git_status_files(cwd: Path):
                     path_str = path_str.split(" -> ")[1]
                 path_clean = path_str.strip('"')
                 p = cwd / path_clean
-                if p.is_file() and path_clean != "commit-plan.json" and not path_clean.startswith(".git"):
+                if p.name in DEFAULT_IGNORES or p.name == ".DS_Store" or path_clean == "commit-plan.json" or path_clean.startswith(".git"):
+                    continue
+                if p.is_file():
                     files.append(str(p.relative_to(cwd)))
+                elif p.is_dir():
+                    # Sécurité : si une entrée est un dossier, parcourir récursivement
+                    for root, _, filenames in os.walk(p):
+                        for fn in filenames:
+                            if fn in DEFAULT_IGNORES or fn == ".DS_Store":
+                                continue
+                            sub_p = Path(root) / fn
+                            if is_text_file(sub_p):
+                                files.append(str(sub_p.relative_to(cwd)))
         return files
     except Exception:
         return []
 
 def scan_directory(cwd: Path, all_files=False):
-    """Scanne le dossier courant et sélectionne les fichiers pertinents."""
+    """Scanne le dossier courant et sélectionne les fichiers pertinents dans toute l'arborescence."""
     if not all_files:
         git_files = get_git_status_files(cwd)
         if git_files:
-            return sorted(git_files)
+            return sorted(set(git_files))
 
     selected = []
     for root, dirs, files in os.walk(cwd):
@@ -85,10 +97,91 @@ def scan_directory(cwd: Path, all_files=False):
             if is_text_file(p) and p.stat().st_size < 500 * 1024:
                 selected.append(str(rel_p))
 
-    return sorted(selected)
+    return sorted(set(selected))
+
+def extract_file_intent(cwd: Path, rel_path: str) -> str:
+    """Extrait l'intention métier/technique réelle du fichier (via git diff ou docstrings/commentaires)."""
+    full_path = cwd / rel_path
+
+    # 1. Si le fichier est suivi et modifié, extraire les lignes clés du git diff
+    try:
+        cmd = ["git", "diff", "-U0", "--no-color", "--", rel_path]
+        res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+        if res.stdout:
+            added = []
+            for l in res.stdout.splitlines():
+                if l.startswith("+") and not l.startswith("+++"):
+                    clean = l[1:].strip()
+                    # Ignorer les lignes de pure syntaxe
+                    if len(clean) > 5 and clean not in ("{", "}", ");", "];", "end"):
+                        added.append(clean)
+            if added:
+                # Filtrer les commentaires et déclarations ajoutées
+                meaningful = [l for l in added if any(l.startswith(x) for x in ("#", "//", "/*", "*", "def ", "class ", "function ", "public ", "const ", "var ", "let "))]
+                summary = meaningful if meaningful else added
+                return "changes: " + " | ".join(summary[:3])
+    except Exception:
+        pass
+
+    # 2. Pour les nouveaux fichiers ou sans diff : extraire docstrings ou commentaires de tête
+    doc_lines = []
+    in_block = False
+    symbols = []
+
+    try:
+        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+            for _ in range(60):
+                line = f.readline()
+                if not line:
+                    break
+                s = line.strip()
+
+                # Docstring Python """ ou bloc /* */
+                if '"""' in s:
+                    in_block = not in_block
+                    clean = s.replace('"""', "").strip()
+                    if clean:
+                        doc_lines.append(clean)
+                    continue
+                elif "/*" in s:
+                    in_block = True
+                    clean = s.replace("/*", "").replace("*/", "").strip()
+                    if clean:
+                        doc_lines.append(clean)
+                    continue
+                elif "*/" in s:
+                    in_block = False
+                    continue
+
+                if in_block:
+                    clean = re.sub(r"^\*+\s*", "", s).strip()
+                    if clean and len(clean) > 5:
+                        doc_lines.append(clean)
+                    continue
+
+                if s.startswith(("#", "//")):
+                    clean = re.sub(r"^[#/]+\s*", "", s).strip()
+                    if clean and len(clean) > 8 and not clean.startswith(("!", "shellcheck", "eslint", "coding")):
+                        doc_lines.append(clean)
+
+                m = re.search(r"(?:class|def|function|async def|public function)\s+([a-zA-Z0-9_]+)", s)
+                if m:
+                    symbols.append(m.group(1))
+    except Exception:
+        pass
+
+    if doc_lines:
+        headline = doc_lines[0]
+        if len(doc_lines) > 1 and len(headline) < 30:
+            headline += " - " + doc_lines[1]
+        return headline[:120]
+    elif symbols:
+        return f"implements {', '.join(symbols[:3])}"
+    
+    return "core implementation"
 
 def analyze_file(cwd: Path, rel_path: str):
-    """Analyse légère: extrait les imports, définitions clés et rôle."""
+    """Analyse légère: extrait les imports, définitions clés, rôle et intention sémantique."""
     full_path = cwd / rel_path
     ext = full_path.suffix.lower()
     name = full_path.name.lower()
@@ -124,10 +217,13 @@ def analyze_file(cwd: Path, rel_path: str):
     except Exception:
         pass
 
+    intent = extract_file_intent(cwd, rel_path)
+
     return {
         "path": rel_path,
         "role": role,
-        "symbols": symbols[:5],
+        "intent": intent,
+        "symbols": symbols[:4],
         "imports": imports[:5]
     }
 
@@ -147,35 +243,40 @@ def resolve_links(file_analyses):
         fa["links_to"] = list(linked)
         del fa["imports"]
 
-def call_ollama(prompt_content: str, model="qwen2.5-coder:1.5b", base_url="http://localhost:11434"):
-    """Appelle Ollama avec sortie JSON contrainte."""
+def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url="http://localhost:11434"):
+    """Appelle Ollama avec sortie JSON contrainte et dimensionnement adapté."""
     url = f"{base_url}/api/chat"
+
+    id_key = "module_ids" if is_modular else "file_ids"
+    example_id = "[1, 2]" if is_modular else "[1, 2]"
+
+    system_prompt = (
+        "You are a senior tech lead and Git commit architect.\n"
+        "Your task is to organize the numbered items into 3 to 8 logical, coherent Conventional Commits by their integer IDs in '" + id_key + "'.\n\n"
+        "CRITICAL COMMIT MESSAGE RULES:\n"
+        "1. Every ID from 1 to N MUST be included in exactly one commit in '" + id_key + "'.\n"
+        "2. NEVER mention filenames, file extensions, or raw file paths in the commit message or scope.\n"
+        "   - FORBIDDEN: 'feat(lib/planner.py): add planner.py'\n"
+        "   - FORBIDDEN: 'feat(auth): add AuthService.php'\n"
+        "3. The <scope> MUST be a conceptual domain (e.g. auth, api, cli, formalites, consultation, config, docs, core).\n"
+        "4. The <summary> MUST describe the functional ACTION and INTENT in imperative mood:\n"
+        "   - EXAMPLE: 'feat(auth): add Google OAuth method to registration flow'\n"
+        "   - EXAMPLE: 'feat(api): add business formality write endpoints for companies'\n"
+        "   - EXAMPLE: 'fix(scanner): support recursive subdirectory scanning in git status'\n"
+        "5. Output strictly a JSON object matching this schema:\n"
+        "{\n"
+        '  "commits": [\n'
+        '    {"message": "<type>(<scope>): <action summary>\\n\\n<short rationale>", "' + id_key + '": ' + example_id + '}\n'
+        "  ]\n"
+        "}"
+    )
+
     payload = {
         "model": model,
         "messages": [
             {
                 "role": "system",
-                "content": (
-                    "You are an expert Git commit architect.\n"
-                    "Group the given project files into a logical, coherent sequence of 3 to 7 Conventional Commits.\n"
-                    "Rules:\n"
-                    "1. Order commits chronologically by development lifecycle:\n"
-                    "   - Setup & Configuration (chore/build)\n"
-                    "   - Core libraries, data models or foundations (feat/refactor)\n"
-                    "   - Features, services, CLI or entrypoints (feat)\n"
-                    "   - Tests, documentation and samples (test/docs)\n"
-                    "2. Group coupled or interdependent files together in the same commit.\n"
-                    "3. Write a UNIQUE and meaningful Conventional Commit message for each commit based on its specific files:\n"
-                    "   Format: <type>(<scope>): <summary>\\n\\n<body explaining rationale>\n"
-                    "   Example scopes: (config), (core), (cli), (runner), (docs), (test).\n"
-                    "4. Assign each given file into the most appropriate commit.\n"
-                    "5. Output strictly a JSON object with this exact structure:\n"
-                    "{\n"
-                    '  "commits": [\n'
-                    '    {"message": "<type>(<scope>): <summary>\\n\\n<rationale>", "files": ["<filename>"]}\n'
-                    "  ]\n"
-                    "}"
-                )
+                "content": system_prompt
             },
             {
                 "role": "user",
@@ -186,9 +287,9 @@ def call_ollama(prompt_content: str, model="qwen2.5-coder:1.5b", base_url="http:
         "stream": False,
         "keep_alive": 0,
         "options": {
-            "temperature": 0.2,
-            "num_ctx": 2048,
-            "num_predict": 700
+            "temperature": 0.1,
+            "num_ctx": 4096,
+            "num_predict": 1000
         }
     }
 
@@ -196,7 +297,7 @@ def call_ollama(prompt_content: str, model="qwen2.5-coder:1.5b", base_url="http:
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=90) as resp:
             body = json.loads(resp.read().decode("utf-8"))
             content = body.get("message", {}).get("content", "{}")
             return json.loads(content)
@@ -299,6 +400,25 @@ def assign_timestamps(commits, cwd: Path, start_date=None, strategy="last"):
 
     return sorted_commits
 
+def sanitize_commit_message(msg: str) -> str:
+    """Nettoie le message pour retirer tout nom de fichier ou extension résiduel du scope."""
+    def clean_scope(m):
+        type_part = m.group(1).lower()
+        raw_scope = m.group(2).strip()
+        rest = m.group(3)
+        scope_name = Path(raw_scope).stem
+        if "/" in scope_name or "\\" in scope_name:
+            scope_name = Path(scope_name).name
+        # Retirer les préfixes numériques de tri (ex: 01_formalites -> formalites)
+        scope_clean = re.sub(r'^[0-9]+[_\-]*', '', scope_name)
+        scope_clean = re.sub(r'[^a-zA-Z0-9_\-]', '', scope_clean).lower()
+        if not scope_clean:
+            scope_clean = "core"
+        return f"{type_part}({scope_clean}):{rest}"
+
+    cleaned = re.sub(r'^([a-zA-Z]+)\(([^)]+)\):(.*)', clean_scope, msg.strip())
+    return cleaned
+
 def reconcile_and_clean_commits(commits, all_files, cwd: Path):
     """Élimine les doublons, filtre les fichiers hors cible et réconcilie les orphelins."""
     target_set = set(all_files)
@@ -313,6 +433,7 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path):
                 assigned_files.add(f)
         if filtered_files:
             c["files"] = filtered_files
+            c["message"] = sanitize_commit_message(c.get("message", "feat(core): update files"))
             cleaned_commits.append(c)
 
     # Réconciliation des orphelins (fichiers ciblés mais non cités par le modèle)
@@ -368,27 +489,74 @@ def main():
     analyses = [analyze_file(cwd, f) for f in files]
     resolve_links(analyses)
 
-    # Prompt compact (économise tokens et énergie)
-    prompt_lines = ["Files to organize into coherent commits:"]
-    for fa in analyses:
-        desc = f"- {fa['path']} [{fa['role']}]"
-        if fa.get("symbols"):
-            desc += f" (defines: {', '.join(fa['symbols'])})"
-        if fa.get("links_to"):
-            desc += f" (links: {', '.join(fa['links_to'])})"
-        prompt_lines.append(desc)
+    analyses_dict = {fa["path"]: fa for fa in analyses}
+
+    # Stratégie hybride : si plus de 12 fichiers, regrouper par sous-dossier/module logique
+    is_modular = len(files) > 12
+    id_map = {}
+
+    if is_modular:
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for f in files:
+            p = Path(f)
+            if len(p.parts) > 1:
+                parent_dir = str(p.parent)
+                groups[parent_dir].append(f)
+            else:
+                groups["root"].append(f)
+
+        prompt_lines = ["Modules to organize into 3 to 8 logical commits:"]
+        for idx, (dir_path, g_files) in enumerate(groups.items(), 1):
+            id_map[idx] = g_files
+            scope_name = Path(dir_path).name.lower().replace("-", "_") if dir_path != "root" else "core"
+            scope_clean = re.sub(r'[^a-zA-Z0-9_\-]', '', scope_name) or "module"
+            sample_intents = [analyses_dict[gf]["intent"] for gf in g_files[:2] if gf in analyses_dict]
+            summary = " | ".join([s for s in sample_intents if s])[:120]
+            prompt_lines.append(f"- Module [{idx}] '{scope_clean}': {len(g_files)} file(s) in {dir_path} ({summary})")
+    else:
+        prompt_lines = ["Files to organize into logical commits:"]
+        for idx, fa in enumerate(analyses, 1):
+            id_map[idx] = [fa["path"]]
+            desc = f"[{idx}] {fa['path']} [{fa['role']}]: {fa['intent']}"
+            if fa.get("links_to"):
+                desc += f" (links: {', '.join(fa['links_to'])})"
+            prompt_lines.append(desc)
 
     prompt = "\n".join(prompt_lines)
-    print(f"\033[0;34m[INFO]\033[0m Inférence via SLM sobre '{args.model}'...")
-    res = call_ollama(prompt, model=args.model)
+    print(f"\033[0;34m[INFO]\033[0m Inférence via SLM sobre '{args.model}' (mode: {'modulaire' if is_modular else 'fichiers'})...")
+    res = call_ollama(prompt, is_modular=is_modular, model=args.model)
 
     raw_commits = res.get("commits", [])
     if not raw_commits:
         print("\033[0;31m[ERROR]\033[0m Le modèle n'a renvoyé aucun commit.", file=sys.stderr)
         sys.exit(1)
 
+    # Reconstituer la liste réelle des fichiers à partir des identifiants (module_ids ou file_ids)
+    expanded_commits = []
+    id_key = "module_ids" if is_modular else "file_ids"
+
+    for rc in raw_commits:
+        c_files = []
+        ids = rc.get(id_key, []) or rc.get("file_ids", []) or rc.get("module_ids", [])
+        if not ids and "files" in rc:
+            c_files = rc["files"]
+        else:
+            for item_id in ids:
+                try:
+                    int_id = int(item_id)
+                    if int_id in id_map:
+                        c_files.extend(id_map[int_id])
+                except Exception:
+                    pass
+
+        expanded_commits.append({
+            "message": rc.get("message", "feat: project update"),
+            "files": c_files
+        })
+
     # Nettoyage, déduplication et réconciliation
-    commits = reconcile_and_clean_commits(raw_commits, files, cwd)
+    commits = reconcile_and_clean_commits(expanded_commits, files, cwd)
 
     # Assignation des dates basées sur l'heure réelle de modification (mtime)
     commits = assign_timestamps(commits, cwd, start_date=args.start_date, strategy=args.date_strategy)
