@@ -122,7 +122,8 @@ Explore les fichiers du dossier courant, extrait les dépendances/liaisons struc
 Options disponibles :
 - `-a` ou `--all` : analyse tous les fichiers du dossier (au lieu de se limiter aux modifications `git status`).
 - `--dry-run` : affiche le plan généré dans le terminal sans créer de fichier.
-- `--start-date YYYY-MM-DDTHH:MM:SS` : spécifie une date de départ pour les commits (les dates sont calculées chronologiquement pendant les heures ouvrées).
+- `--date-strategy <last|first>` : stratégie de date pour chaque commit (défaut: `last` pour le dernier fichier modifié du lot, ou `first` pour le premier).
+- `--start-date YYYY-MM-DDTHH:MM:SS` : force une date de départ synthétique au lieu de l'heure réelle de modification (`mtime`).
 - `-m` ou `--model` : sélectionne un modèle Ollama alternatif (défaut : `qwen2.5-coder:1.5b`).
 
 ```bash
