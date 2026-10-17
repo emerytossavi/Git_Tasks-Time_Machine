@@ -160,18 +160,19 @@ def call_ollama(prompt_content: str, model="qwen2.5-coder:1.5b", base_url="http:
                     "Group the given project files into a logical, coherent sequence of 3 to 7 Conventional Commits.\n"
                     "Rules:\n"
                     "1. Order commits chronologically by development lifecycle:\n"
-                    "   - Setup & Configuration first (chore/build)\n"
+                    "   - Setup & Configuration (chore/build)\n"
                     "   - Core libraries, data models or foundations (feat/refactor)\n"
-                    "   - Main logic, features, CLI or entrypoints (feat)\n"
-                    "   - Tests, documentation and samples last (test/docs)\n"
+                    "   - Features, services, CLI or entrypoints (feat)\n"
+                    "   - Tests, documentation and samples (test/docs)\n"
                     "2. Group coupled or interdependent files together in the same commit.\n"
-                    "3. Format each commit message as:\n"
-                    "   <type>(<scope>): <summary>\\n\\n<body explaining rationale>\n"
+                    "3. Write a UNIQUE and meaningful Conventional Commit message for each commit based on its specific files:\n"
+                    "   Format: <type>(<scope>): <summary>\\n\\n<body explaining rationale>\n"
+                    "   Example scopes: (config), (core), (cli), (runner), (docs), (test).\n"
                     "4. Assign each given file into the most appropriate commit.\n"
                     "5. Output strictly a JSON object with this exact structure:\n"
                     "{\n"
                     '  "commits": [\n'
-                    '    {"message": "feat(core): add core module\\n\\nShort explanation.", "files": ["path/to/file.ext"]}\n'
+                    '    {"message": "<type>(<scope>): <summary>\\n\\n<rationale>", "files": ["<filename>"]}\n'
                     "  ]\n"
                     "}"
                 )
@@ -183,10 +184,11 @@ def call_ollama(prompt_content: str, model="qwen2.5-coder:1.5b", base_url="http:
         ],
         "format": "json",
         "stream": False,
+        "keep_alive": 0,
         "options": {
-            "temperature": 0.1,
+            "temperature": 0.2,
             "num_ctx": 2048,
-            "num_predict": 600
+            "num_predict": 700
         }
     }
 
@@ -206,10 +208,11 @@ def call_ollama(prompt_content: str, model="qwen2.5-coder:1.5b", base_url="http:
         print(f"\033[0;31m[ERROR]\033[0m Échec lors du parsing de la réponse LLM : {e}", file=sys.stderr)
         sys.exit(1)
 
-def generate_timestamps(n_commits: int, start_date=None, interval_min=45, interval_max=120):
-    """Génère des timestamps ISO 8601 strictement croissants et réalistes."""
+def generate_synthetic_timestamps(commits, start_date=None, interval_min=45, interval_max=120):
+    """Génère des timestamps synthétiques répartis sur des heures ouvrées."""
     now = datetime.now().astimezone()
     tz = now.tzinfo
+    n_commits = len(commits)
 
     if start_date:
         try:
@@ -220,25 +223,81 @@ def generate_timestamps(n_commits: int, start_date=None, interval_min=45, interv
         days_back = max(1, (n_commits * 90) // (8 * 60))
         current_dt = (now - timedelta(days=days_back)).replace(hour=9, minute=15, second=0)
 
-    timestamps = []
-    for _ in range(n_commits):
-        # Heures ouvrées : entre 09:00 et 18:30
+    for c in commits:
         if current_dt.time() > time(18, 30):
             current_dt = (current_dt + timedelta(days=1)).replace(
                 hour=9, minute=random.randint(10, 40), second=0
             )
 
-        # Sauter les weekends
         while current_dt.weekday() in (5, 6):
             current_dt = (current_dt + timedelta(days=1)).replace(
                 hour=9, minute=random.randint(10, 40), second=0
             )
 
-        timestamps.append(current_dt.isoformat(timespec="seconds"))
+        c["date"] = current_dt.isoformat(timespec="seconds")
         delta_minutes = random.randint(interval_min, interval_max)
         current_dt += timedelta(minutes=delta_minutes)
 
-    return timestamps
+    return commits
+
+def assign_timestamps(commits, cwd: Path, start_date=None, strategy="last"):
+    """
+    Assigne des dates basées sur l'heure réelle de dernière modification (mtime) des fichiers.
+    Strategy:
+      - 'last': se base sur le dernier fichier modifié du lot (max)
+      - 'first': se base sur le premier fichier modifié du lot (min)
+    Garantit l'ordre chronologique strict requis par validator.sh.
+    """
+    now = datetime.now().astimezone()
+    tz = now.tzinfo
+
+    if start_date:
+        return generate_synthetic_timestamps(commits, start_date=start_date)
+
+    commit_entries = []
+    for c in commits:
+        mtimes = []
+        for f in c.get("files", []):
+            p = cwd / f
+            if p.exists():
+                try:
+                    mtimes.append(os.path.getmtime(p))
+                except Exception:
+                    pass
+
+        if mtimes:
+            raw_time = min(mtimes) if strategy == "first" else max(mtimes)
+            commit_mtime = int(round(raw_time))
+        else:
+            commit_mtime = None
+
+        commit_entries.append({"commit": c, "mtime": commit_mtime})
+
+    valid_mtimes = [e["mtime"] for e in commit_entries if e["mtime"] is not None]
+    if not valid_mtimes or (max(valid_mtimes) - min(valid_mtimes) < 5):
+        # Cas où tous les fichiers ont été clonés ou touchés dans la même seconde
+        return generate_synthetic_timestamps(commits)
+
+    # Trier les commits selon la chronologie réelle de modification
+    commit_entries.sort(key=lambda e: e["mtime"] if e["mtime"] is not None else 0)
+
+    prev_epoch = 0
+    sorted_commits = []
+
+    for entry in commit_entries:
+        c = entry["commit"]
+        target_epoch = entry["mtime"] if entry["mtime"] is not None else (prev_epoch + 60)
+
+        # Si deux commits ont la même seconde ou sont dans le désordre, avancer d'au moins 60s
+        if target_epoch <= prev_epoch:
+            target_epoch = prev_epoch + random.randint(60, 180)
+
+        prev_epoch = target_epoch
+        dt = datetime.fromtimestamp(target_epoch).astimezone(tz)
+        c["date"] = dt.isoformat(timespec="seconds")
+        sorted_commits.append(c)
+
+    return sorted_commits
 
 def reconcile_and_clean_commits(commits, all_files, cwd: Path):
     """Élimine les doublons, filtre les fichiers hors cible et réconcilie les orphelins."""
@@ -291,6 +350,7 @@ def main():
     parser.add_argument("-a", "--all", action="store_true", help="Analyser tous les fichiers du dossier (pas uniquement git status)")
     parser.add_argument("-m", "--model", default="qwen2.5-coder:1.5b", help="Modèle Ollama (défaut: qwen2.5-coder:1.5b)")
     parser.add_argument("--start-date", default=None, help="Date de départ ISO (ex: 2026-10-10T09:00:00)")
+    parser.add_argument("--date-strategy", choices=["last", "first"], default="last", help="Dater selon le 'last' (dernier fichier modifié, défaut) ou 'first' (premier)")
     parser.add_argument("--dry-run", action="store_true", help="Afficher le plan généré sans modifier de fichier")
     args = parser.parse_args()
 
@@ -330,10 +390,8 @@ def main():
     # Nettoyage, déduplication et réconciliation
     commits = reconcile_and_clean_commits(raw_commits, files, cwd)
 
-    # Génération déterministe des dates (ISO 8601 valides et chronologiques)
-    timestamps = generate_timestamps(len(commits), start_date=args.start_date)
-    for i, c in enumerate(commits):
-        c["date"] = timestamps[i]
+    # Assignation des dates basées sur l'heure réelle de modification (mtime)
+    commits = assign_timestamps(commits, cwd, start_date=args.start_date, strategy=args.date_strategy)
 
     final_plan = {"commits": commits}
     plan_json = json.dumps(final_plan, indent=2, ensure_ascii=False)
