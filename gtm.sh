@@ -49,7 +49,7 @@ Usage: gtm <plan|validate|dry-run|run> [options] [chemin/vers/plan.json]
 
 Commandes :
   plan     [options] [plan.json] Génère automatiquement un plan de commits via le SLM local (Qwen2.5-Coder).
-                                 Options : -a/--all, --dry-run, --start-date YYYY-MM-DD, -m/--model
+                                 Options : -a/--all, --dry-run, --date-strategy <last|first>, --start-date YYYY-MM-DD
   validate [plan.json]           Vérifie la conformité du plan JSON.
   dry-run  [plan.json]           Simule l'exécution sans toucher à Git.
   run      [plan.json]           Exécute les commits du plan dans le dépôt courant.
