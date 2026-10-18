@@ -26,6 +26,7 @@ When operating as an AI agent in a repository using `gtm`:
 | **Monotonic Chronology** | Commit dates in `commit-plan.json` MUST be chronologically non-decreasing (`commit[i].date <= commit[i+1].date`). |
 | **Conventional Commits v1.0.0** | Commit messages MUST strictly adhere to Conventional Commits with a valid type (`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`). |
 | **Substantive Descriptions** | If a commit touches multiple files or introduces functional logic, the message MUST include an explanatory body separated from the subject by a blank line (`\n\n`). |
+| **Test Suite Gatekeeper (TDD)** | Any agent modifying GTM source code MUST run `gtm test` and achieve exit status 0 before finalizing changes. |
 
 ---
 
@@ -109,6 +110,19 @@ gtm model qwen2.5-coder:7b
 ```
 - **Exit 0**: Model successfully listed or saved.
 - **Exit 1**: Unrecognized arguments or empty input.
+
+### 3.7. `gtm test`
+Executes the comprehensive automated TDD test suite (Python `unittest` and isolated Shell sandboxes):
+- Planner unit tests (sanitization, reconciliation, monotonicity, configuration).
+- Validator integration tests (valid plans, missing files, malformed JSON, dates).
+- Model and config integration tests (persistence, fallbacks, list modes).
+- Runner and simulation tests (dry-run, atomic commit execution, exact timestamps).
+
+```bash
+gtm test
+```
+- **Exit 0**: All test suites passed (`[SUCCÈS TOTAL]`).
+- **Exit 1**: At least one test suite failed.
 
 ---
 
