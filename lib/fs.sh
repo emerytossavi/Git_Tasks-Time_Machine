@@ -36,6 +36,25 @@ fs_expand_pattern() {
     matches=($pattern)
 
     eval "$_old_nullglob" 2>/dev/null || true
+
+    # Si aucun fichier n'a été trouvé sur le disque, vérifier si le pattern correspond à des fichiers suivis dans Git (notamment supprimés)
+    if (( ${#matches[@]} == 0 )); then
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            local git_files
+            git_files=$(git ls-files --deleted -- "$pattern" 2>/dev/null || true)
+            if [[ -z "$git_files" ]]; then
+                git_files=$(git ls-tree -r --name-only HEAD -- "$pattern" 2>/dev/null || true)
+            fi
+            if [[ -n "$git_files" ]]; then
+                fs_readarray matches "$git_files"
+            elif [[ "$pattern" != *"*"* && "$pattern" != *"?"* ]]; then
+                if git ls-files -- "$pattern" 2>/dev/null | grep -qx "$pattern" || \
+                   git ls-tree -r --name-only HEAD -- "$pattern" 2>/dev/null | grep -qx "$pattern"; then
+                    matches=("$pattern")
+                fi
+            fi
+        fi
+    fi
 }
 
 # Alias pour compatibilité
