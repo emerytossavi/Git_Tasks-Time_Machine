@@ -48,10 +48,10 @@ gtm doctor
 - *Agent Action*: Run `gtm doctor` at step 0 of any setup workflow.
 
 ### 3.2. `gtm plan`
-Leverages the local SLM (default `qwen2.5-coder:1.5b`) to inspect unstaged/staged files, extract semantic intent (AST functions, API endpoints, XML workflows, config schemas), and generate `commit-plan.json`.
+Leverages the local SLM (default `qwen2.5-coder:1.5b`) to inspect unstaged/staged files, extract semantic intent (AST functions, API endpoints, XML workflows, config schemas), and generate `.gtm/commit-plan.json` (with automatic `.gtm/.gitignore` containing `*` to guarantee zero Git tracking residue).
 
 ```bash
-# Plan uncommitted changes
+# Plan uncommitted changes (generates .gtm/commit-plan.json)
 gtm plan
 
 # Include all files (tracked + untracked)
@@ -73,7 +73,11 @@ Verifies the syntactic and semantic integrity of the commit plan:
 - Conventional commit message header format.
 
 ```bash
-gtm validate commit-plan.json
+# Validates default plan (.gtm/commit-plan.json or fallback commit-plan.json)
+gtm validate
+
+# Or specify a custom plan file
+gtm validate .gtm/commit-plan.json
 ```
 - **Exit 0**: Plan is completely valid and ready for execution.
 - **Exit 1**: Structural or semantic failure (error logged to stderr).
@@ -85,7 +89,9 @@ Performs a full dry-run simulation of the commit plan:
 - Does NOT touch the Git index or object database.
 
 ```bash
-gtm dry-run commit-plan.json
+gtm dry-run
+# Or specify a custom plan
+gtm dry-run .gtm/commit-plan.json
 ```
 
 ### 3.5. `gtm run [plan.json]`
@@ -95,7 +101,9 @@ Executes atomic staging and commits for each item in the plan:
 - Creates commits via `git commit -m "<message>"`.
 
 ```bash
-gtm run commit-plan.json
+gtm run
+# Or specify a custom plan
+gtm run .gtm/commit-plan.json
 ```
 
 ### 3.6. `gtm model [model_name|--list]`
@@ -135,29 +143,29 @@ Use this recipe when an agent has modified multiple files and wants to commit th
 # Step 1: Pre-flight check
 gtm doctor || exit 1
 
-# Step 2: Generate candidate plan
+# Step 2: Generate candidate plan (saved in .gtm/commit-plan.json)
 gtm plan -a
 
-# Step 3: Automated verification
-gtm validate commit-plan.json || {
-  echo "Validation failed; inspect commit-plan.json"
+# Step 3: Automated verification (automatically targets .gtm/commit-plan.json)
+gtm validate || {
+  echo "Validation failed; inspect .gtm/commit-plan.json"
   exit 1
 }
 
 # Step 4: Dry-run check
-gtm dry-run commit-plan.json
+gtm dry-run
 
 # Step 5: Execute commits
-gtm run commit-plan.json
+gtm run
 ```
 
 ### Scenario B: Custom Plan Generation by Agent (Bypassing SLM)
-An AI agent can directly author `commit-plan.json` without running Ollama:
+An AI agent can directly author `.gtm/commit-plan.json` without running Ollama:
 
-1. Create `commit-plan.json` following the schema in [`docs/commit-plan-spec.md`](file:///Users/emery.toss/Downloads/Workspace/apps/Git_Tasks-Time_Machine/docs/commit-plan-spec.md).
+1. Create `.gtm/commit-plan.json` following the schema in [`docs/commit-plan-spec.md`](file:///Users/emery.toss/Downloads/Workspace/apps/Git_Tasks-Time_Machine/docs/commit-plan-spec.md).
 2. Validate and execute:
    ```bash
-   gtm validate commit-plan.json && gtm run commit-plan.json
+   gtm validate && gtm run
    ```
 
 ---
