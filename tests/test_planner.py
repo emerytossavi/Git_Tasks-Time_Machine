@@ -10,6 +10,7 @@ import os
 import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
+import subprocess
 
 # Ajouter la racine du projet au sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -285,6 +286,88 @@ class TestPlannerUnit(unittest.TestCase):
         self.assertEqual(cat["type"], "docs")
         self.assertEqual(cat["scope"], "docs")
 
+    def test_get_git_status_files_includes_deleted_files(self):
+        """RED test: Vérifie que les fichiers supprimés du dépôt sont détectés par get_git_status_files."""
+        # Initialiser un dépôt git dans self.cwd
+        subprocess.run(["git", "init"], cwd=str(self.cwd), capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=str(self.cwd), check=True)
+
+        # Créer et commiter un fichier
+        test_file = self.cwd / "obsolete.py"
+        test_file.write_text("def old(): pass\n")
+        subprocess.run(["git", "add", "obsolete.py"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "feat: initial obsolete"], cwd=str(self.cwd), check=True)
+
+        # Supprimer le fichier
+        test_file.unlink()
+
+        # get_git_status_files doit impérativement lister le fichier supprimé
+        status_files = planner.get_git_status_files(self.cwd)
+        self.assertIn("obsolete.py", status_files, "Le fichier supprimé doit être détecté dans git status")
+
+    def test_extract_file_intent_deleted_file(self):
+        """RED test: Vérifie que extract_file_intent extrait une intention de suppression contextualisée."""
+        # Initialiser un dépôt git dans self.cwd
+        subprocess.run(["git", "init"], cwd=str(self.cwd), capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=str(self.cwd), check=True)
+
+        code_file = self.cwd / "legacy_service.py"
+        code_file.write_text("def obsolete_handler():\n    pass\n")
+        subprocess.run(["git", "add", "legacy_service.py"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "feat: add legacy service"], cwd=str(self.cwd), check=True)
+
+        code_file.unlink()
+
+        # En français
+        summary_fr, details_fr = planner.extract_file_intent(self.cwd, "legacy_service.py", target_lang="fr")
+        self.assertTrue(any(w in summary_fr.lower() for w in ("supprimer", "suppression", "retirer")), f"Attendu mot de suppression en FR, reçu: {summary_fr}")
+
+        # En anglais
+        summary_en, details_en = planner.extract_file_intent(self.cwd, "legacy_service.py", target_lang="en")
+        self.assertTrue(any(w in summary_en.lower() for w in ("remove", "delete")), f"Attendu mot de suppression en EN, reçu: {summary_en}")
+
+    def test_reconcile_and_clean_commits_preserves_deleted_files(self):
+        """Vérifie que reconcile_and_clean_commits ne rejette pas les fichiers suivis supprimés."""
+        subprocess.run(["git", "init"], cwd=str(self.cwd), check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=str(self.cwd), check=True)
+
+        target = self.cwd / "deleted_service.py"
+        target.write_text("class OldService:\n    pass\n")
+        subprocess.run(["git", "add", "deleted_service.py"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "initial"], cwd=str(self.cwd), check=True, capture_output=True)
+        target.unlink()
+
+        raw_commits = [{
+            "message": "refactor: remove obsolete service",
+            "files": ["deleted_service.py"]
+        }]
+        result = planner.reconcile_and_clean_commits(
+            raw_commits,
+            ["deleted_service.py"],
+            self.cwd,
+            analyses_dict={"deleted_service.py": {"details": "suppression du service déprécié", "intent": "supprimer legacy"}}
+        )
+        self.assertEqual(len(result), 1)
+        self.assertIn("deleted_service.py", result[0]["files"])
+
+    def test_assign_timestamps_deleted_files(self):
+        """Vérifie que assign_timestamps assigne des dates valides même si les fichiers sont supprimés."""
+        commits = [{
+            "message": "refactor: remove obsolete service",
+            "files": ["non_existent_deleted.py"]
+        }]
+        assigned = planner.assign_timestamps(commits, self.cwd)
+        self.assertEqual(len(assigned), 1)
+        self.assertIn("date", assigned[0])
+        self.assertTrue(len(assigned[0]["date"]) >= 19)
+
 if __name__ == "__main__":
     unittest.main()
+
 
