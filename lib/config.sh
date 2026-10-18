@@ -6,6 +6,7 @@ DEFAULT_REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
 DEFAULT_RAW_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
 DEFAULT_BRANCH="main"
 DEFAULT_SLM_MODEL="qwen2.5-coder:1.5b"
+DEFAULT_OLLAMA_HOST="http://localhost:11434"
 
 config_init() {
     local source_script="$1"
@@ -35,6 +36,13 @@ config_init() {
     REPO_BRANCH="${REPO_BRANCH:-$DEFAULT_BRANCH}"
     DEFAULT_MODEL="${DEFAULT_MODEL:-$DEFAULT_SLM_MODEL}"
     export DEFAULT_MODEL
+
+    OLLAMA_HOST="${OLLAMA_HOST:-${OLLAMA_BASE_URL:-$DEFAULT_OLLAMA_HOST}}"
+    if [[ "$OLLAMA_HOST" != http://* ]] && [[ "$OLLAMA_HOST" != https://* ]]; then
+        OLLAMA_HOST="http://$OLLAMA_HOST"
+    fi
+    OLLAMA_HOST="${OLLAMA_HOST%/}"
+    export OLLAMA_HOST
 }
 
 config_set_plan_file() {
@@ -76,4 +84,47 @@ EOF
 
     DEFAULT_MODEL="$new_model"
     export DEFAULT_MODEL
+}
+
+config_set_ollama_host() {
+    local new_host="$1"
+    local config_file="$GTM_DIR/config.env"
+
+    if [[ -z "$new_host" ]]; then
+        return 1
+    fi
+
+    # Nettoyer les guillemets ou espaces superflus
+    new_host="$(echo "$new_host" | tr -d '\"'"'" | tr -d ' ')"
+    if [[ "$new_host" != http://* ]] && [[ "$new_host" != https://* ]]; then
+        new_host="http://$new_host"
+    fi
+    new_host="${new_host%/}"
+
+    if [[ ! -f "$config_file" ]]; then
+        cat <<EOF > "$config_file"
+# Git Tasks-Time Machine Configuration
+# Standards: POSIX shell variable assignment / sourceable config
+
+REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
+REPO_BRANCH="main"
+RAW_FILE_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
+
+# Modèle SLM local par défaut pour 'gtm plan'
+DEFAULT_MODEL="qwen2.5-coder:1.5b"
+
+# Hôte du serveur Ollama
+OLLAMA_HOST="$new_host"
+EOF
+    elif grep -q "^OLLAMA_HOST=" "$config_file" 2>/dev/null; then
+        local tmp_file
+        tmp_file="$(mktemp "${TMPDIR:-/tmp}/gtm_config.XXXXXX")"
+        sed "s|^OLLAMA_HOST=.*|OLLAMA_HOST=\"$new_host\"|" "$config_file" > "$tmp_file"
+        mv "$tmp_file" "$config_file"
+    else
+        printf '\n# Hôte du serveur Ollama\nOLLAMA_HOST="%s"\n' "$new_host" >> "$config_file"
+    fi
+
+    OLLAMA_HOST="$new_host"
+    export OLLAMA_HOST
 }

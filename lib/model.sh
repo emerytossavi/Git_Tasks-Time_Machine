@@ -7,8 +7,9 @@ model_get_active() {
 }
 
 model_fetch_ollama_models() {
+    local ollama_url="${OLLAMA_HOST:-http://localhost:11434}"
     local tags_json
-    tags_json=$(curl -s --max-time 3 http://localhost:11434/api/tags 2>/dev/null || echo "")
+    tags_json=$(curl -s --max-time 3 "$ollama_url/api/tags" 2>/dev/null || echo "")
     if [[ -z "$tags_json" ]] || [[ "$tags_json" == "{}" ]]; then
         return 1
     fi
@@ -24,13 +25,14 @@ model_fetch_ollama_models() {
 model_list() {
     local active_model
     active_model=$(model_get_active)
+    local ollama_url="${OLLAMA_HOST:-http://localhost:11434}"
 
     echo "=== Modèle SLM configuré dans config.env ==="
     printf "• Modèle actif : \033[1;32m%s\033[0m\n" "$active_model"
     echo
 
-    if ! curl -s --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
-        log_warn "Le démon Ollama n'est pas accessible sur http://localhost:11434."
+    if ! curl -s --max-time 2 "$ollama_url/api/tags" >/dev/null 2>&1; then
+        log_warn "Le démon Ollama n'est pas accessible sur $ollama_url."
         echo "  -> Impossible d'interroger la liste des modèles installés."
         return 0
     fi
@@ -73,9 +75,10 @@ model_set() {
 
     # Vérification dans Ollama si accessible
     local is_installed=0
-    if curl -s --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+    local ollama_url="${OLLAMA_HOST:-http://localhost:11434}"
+    if curl -s --max-time 2 "$ollama_url/api/tags" >/dev/null 2>&1; then
         local tags_json
-        tags_json=$(curl -s --max-time 2 http://localhost:11434/api/tags 2>/dev/null || echo "")
+        tags_json=$(curl -s --max-time 2 "$ollama_url/api/tags" 2>/dev/null || echo "")
         if echo "$tags_json" | grep -q "\"name\":\"${target_model}"; then
             is_installed=1
         fi
@@ -85,7 +88,7 @@ model_set() {
     log_ok "Modèle par défaut configuré : '$target_model' (sauvegardé dans config.env)"
 
     if (( is_installed == 0 )); then
-        log_warn "Le modèle '$target_model' n'a pas été détecté dans Ollama."
+        log_warn "Le modèle '$target_model' n'a pas été détecté sur $ollama_url."
         echo "  -> Si vous ne l'avez pas encore récupéré, exécutez : ollama pull $target_model"
     fi
 }
@@ -93,12 +96,14 @@ model_set() {
 model_interactive() {
     local active_model
     active_model=$(model_get_active)
+    local ollama_url="${OLLAMA_HOST:-http://localhost:11434}"
 
     printf "Modèle actuel dans config.env : \033[1;32m%s\033[0m\n" "$active_model"
+    printf "Serveur Ollama actif          : \033[1;34m%s\033[0m\n" "$ollama_url"
     echo
 
-    if ! curl -s --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
-        log_warn "Le démon Ollama n'est pas accessible sur http://localhost:11434."
+    if ! curl -s --max-time 2 "$ollama_url/api/tags" >/dev/null 2>&1; then
+        log_warn "Le démon Ollama n'est pas accessible sur $ollama_url."
         echo "Vous pouvez néanmoins saisir manuellement le nom d'un modèle :"
         printf "Nom du modèle (ou 'q' pour annuler) : "
         read -r manual_choice

@@ -57,21 +57,22 @@ doctor_check_all() {
     fi
 
     # 5. Ollama daemon & modèles
+    local ollama_url="${OLLAMA_HOST:-http://localhost:11434}"
     printf "• Démon Ollama  : "
     local ollama_online=0
-    if curl -s --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
-        echo "OK (en ligne sur http://localhost:11434)"
+    if curl -s --max-time 2 "$ollama_url/api/tags" >/dev/null 2>&1; then
+        echo "OK (en ligne sur $ollama_url)"
         ollama_online=1
     else
-        echo "HORS LIGNE ou NON INSTALLÉ"
-        echo "  -> Note : requis pour 'gtm plan'. Lancez 'ollama serve' ou l'application Ollama."
+        echo "HORS LIGNE ou NON ACCESSIBLE sur $ollama_url"
+        echo "  -> Note : requis pour 'gtm plan'. Lancez Ollama ou vérifiez OLLAMA_HOST dans config.env."
     fi
 
     if (( ollama_online == 1 )); then
         printf "• Modèle SLM    : "
         local configured_model="${DEFAULT_MODEL:-qwen2.5-coder:1.5b}"
         local tags_json
-        tags_json=$(curl -s --max-time 2 http://localhost:11434/api/tags 2>/dev/null || echo "{}")
+        tags_json=$(curl -s --max-time 2 "$ollama_url/api/tags" 2>/dev/null || echo "{}")
         if echo "$tags_json" | grep -q "\"name\":\"${configured_model}"; then
             echo "OK ($configured_model détecté [actif dans config.env])"
         else
