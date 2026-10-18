@@ -125,8 +125,17 @@ Grâce au fichier `.gtm/.gitignore` généré automatiquement avec la directive 
   - Fichier exact : `"src/auth/jwt.js"`
   - Fichier racine : `"Dockerfile"`, `".dockerignore"`
   - Glob patterns : `"src/**/*.ts"`, `"migrations/*.sql"`
-- **Vérification d'existence** :  
-  `gtm validate` s'assure qu'au moins un fichier réel correspond à chaque entrée (ou pattern) sur le système de fichiers local.
+- **Vérification d'existence & Suppressions de fichiers** :  
+  - Pour les fichiers existants, `gtm validate` s'assure qu'au moins un fichier réel correspond à chaque entrée (ou pattern) sur le système de fichiers local.
+  - **Prise en charge des fichiers supprimés** : Si un fichier n'existe plus sur le disque mais était suivi dans l'historique ou l'index Git (détecté via `git status`, `git ls-files` ou `HEAD`), `gtm validate` le reconnaît comme une suppression valide.
+  - Dans la simulation `gtm dry-run`, le fichier supprimé est explicitement annoté `[supprimé]`.
+  - Lors de `gtm run`, `gtm` utilise `git add -A` pour indexer la suppression et enregistrer le commit atomique de suppression dans l'historique Git.
+  - **Typage contextuel des suppressions** : Les suppressions sont classées selon leur contexte métier :
+    - Fichiers source / code applicatif ➜ `refactor` (ex: `refactor(services): remove obsolete download tracker`)
+    - Tests ➜ `test` (ex: `test: remove deprecated test cases`)
+    - Documentation ➜ `docs` (ex: `docs: remove legacy guides`)
+    - Configurations et scripts ➜ `chore`
+    - CI / Docker ➜ `ci` / `build`
 
 ---
 
