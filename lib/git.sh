@@ -12,7 +12,23 @@ git_reset_stage() {
 
 git_stage_file() {
     local file="$1"
-    git add -- "$file"
+    git add -A -- "$file"
+}
+
+git_is_file_deleted() {
+    local file="$1"
+    if [[ ! -e "$file" ]]; then
+        if git status --porcelain -uall -- "$file" 2>/dev/null | grep -q '^.D\|^D'; then
+            return 0
+        fi
+        if git ls-files --error-unmatch -- "$file" >/dev/null 2>&1; then
+            return 0
+        fi
+        if git ls-tree -r --name-only HEAD -- "$file" 2>/dev/null | grep -qx "$file"; then
+            return 0
+        fi
+    fi
+    return 1
 }
 
 git_has_staged_changes() {
