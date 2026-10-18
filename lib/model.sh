@@ -176,7 +176,16 @@ model_interactive() {
 }
 
 model_cmd() {
-    case "${1:-}" in
+    if (( $# == 0 )); then
+        if [[ -t 0 ]]; then
+            model_interactive
+        else
+            model_list
+        fi
+        return 0
+    fi
+
+    case "$1" in
         --list|-l|list)
             model_list
             ;;
@@ -188,15 +197,12 @@ model_cmd() {
             echo "  <nom>            Configure directement le modèle par défaut dans config.env"
             echo "  --list, -l       Liste les modèles installés et indique le modèle actif"
             ;;
-        "")
-            if [[ -t 0 ]]; then
-                model_interactive
-            else
-                model_list
-            fi
-            ;;
         -i|--interactive)
             model_interactive
+            ;;
+        "")
+            log_error "Veuillez spécifier le nom d'un modèle (ex: gtm model qwen2.5-coder:7b)."
+            return 1
             ;;
         *)
             model_set "$1"
