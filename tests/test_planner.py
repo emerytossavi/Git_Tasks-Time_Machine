@@ -35,7 +35,9 @@ class TestPlannerUnit(unittest.TestCase):
         self.assertTrue(planner.is_system_excluded(".git/HEAD"))
         self.assertTrue(planner.is_system_excluded(".DS_Store"))
         self.assertTrue(planner.is_system_excluded("commit-plan.json"))
+        self.assertTrue(planner.is_system_excluded("config.env"))
         # Fichiers réguliers autorisés
+        self.assertFalse(planner.is_system_excluded("config.env.example"))
         self.assertFalse(planner.is_system_excluded("src/main.py"))
         self.assertFalse(planner.is_system_excluded("README.md"))
 
@@ -277,6 +279,18 @@ class TestPlannerUnit(unittest.TestCase):
                 os.environ["DEFAULT_LANG"] = old_lang
             else:
                 os.environ.pop("DEFAULT_LANG", None)
+
+    def test_read_config_var_cascade(self):
+        """Vérifie le chargement en cascade : environnement > config.env > config.env.example > fallback."""
+        # 1. Fallback par défaut
+        self.assertEqual(planner.read_config_var(["NON_EXISTENT_VAR"], fallback="default_val"), "default_val")
+
+        # 2. Surcharge via variable d'environnement
+        os.environ["TEST_GTM_VAR"] = "from_env"
+        try:
+            self.assertEqual(planner.read_config_var(["TEST_GTM_VAR"], fallback="fallback"), "from_env")
+        finally:
+            os.environ.pop("TEST_GTM_VAR", None)
 
     def test_extract_file_intent_multilingual(self):
         """Vérifie que extract_file_intent produit des résumés adaptés à la langue cible."""
