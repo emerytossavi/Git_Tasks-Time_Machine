@@ -98,6 +98,28 @@ assert_equals "DEFAULT_LANG persisté dans config.env" "fr" "$val_lang"
 val_lang_es=$(grep "^DEFAULT_LANG=" config.env | cut -d'=' -f2 | tr -d '"')
 assert_equals "Sous-commande config lang persistée" "es" "$val_lang_es"
 
+# 9. Test fallback config.env.example quand config.env est absent
+rm -f config.env
+cat <<EOF > config.env.example
+DEFAULT_MODEL="qwen2.5-coder:7b"
+OLLAMA_HOST="http://localhost:11434"
+DEFAULT_LANG="de"
+EOF
+
+# Réinitialiser les variables exportées pour tester le rechargement propre
+unset DEFAULT_MODEL DEFAULT_LANG
+config_init "$PWD/gtm.sh"
+assert_equals "Fallback DEFAULT_MODEL depuis config.env.example" "qwen2.5-coder:7b" "$DEFAULT_MODEL"
+assert_equals "Fallback DEFAULT_LANG depuis config.env.example" "de" "$DEFAULT_LANG"
+
+# 10. Test que gtm model crée config.env à partir de config.env.example sans altérer le template
+./gtm.sh model smollm:360m >/dev/null 2>&1
+assert_equals "config.env créé" "1" "$([[ -f config.env ]] && echo 1 || echo 0)"
+val_model_created=$(grep "^DEFAULT_MODEL=" config.env | cut -d'=' -f2 | tr -d '"')
+assert_equals "Modèle mis à jour dans config.env privé" "smollm:360m" "$val_model_created"
+val_template_untouched=$(grep "^DEFAULT_MODEL=" config.env.example | cut -d'=' -f2 | tr -d '"')
+assert_equals "Modèle inchangé dans config.env.example public" "qwen2.5-coder:7b" "$val_template_untouched"
+
 echo
 if (( FAILED > 0 )); then
     printf "\033[0;31mÉchec : %d test(s) échoué(s) sur %d.\033[0m\n" "$FAILED" "$((PASSED + FAILED))"
