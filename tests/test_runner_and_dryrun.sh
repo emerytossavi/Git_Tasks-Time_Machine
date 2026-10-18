@@ -137,6 +137,56 @@ else
     FAILED=$((FAILED + 1))
 fi
 
+# 4. Test d'exécution de commit pour fichier supprimé
+echo "file to delete" > obsolete.txt
+git add obsolete.txt
+git commit -q --no-gpg-sign -m "chore: add obsolete file"
+rm -f obsolete.txt
+
+cat <<EOF > .gtm/commit-plan.json
+{
+  "commits": [
+    {
+      "date": "2026-10-18T12:00:00+01:00",
+      "message": "refactor(core): remove obsolete module\n\nClean up unused obsolete module.",
+      "files": ["obsolete.txt"]
+    }
+  ]
+}
+EOF
+
+# Vérifier dry-run output
+dry_run_out=$("$PROJECT_ROOT/gtm.sh" dry-run)
+if echo "$dry_run_out" | grep -q "obsolete.txt \[supprimé\]"; then
+    printf "  \033[0;32m✔\033[0m gtm dry-run signale explicitement le fichier supprimé\n"
+    PASSED=$((PASSED + 1))
+else
+    printf "  \033[0;31m✘\033[0m gtm dry-run ne signale pas [supprimé] dans la sortie\n"
+    FAILED=$((FAILED + 1))
+fi
+
+# Exécution de gtm run
+assert_exit_code "gtm run applique le commit de suppression" 0 "$PROJECT_ROOT/gtm.sh" run
+
+# Vérifier que le dernier commit est bien une suppression
+last_commit_diff=$(git diff-tree --no-commit-id --name-status -r HEAD)
+if [[ "$last_commit_diff" == *"D"*"obsolete.txt"* ]]; then
+    printf "  \033[0;32m✔\033[0m Le commit a bien enregistré la suppression du fichier dans git\n"
+    PASSED=$((PASSED + 1))
+else
+    printf "  \033[0;31m✘\033[0m Le commit n'a pas enregistré la suppression : %s\n" "$last_commit_diff"
+    FAILED=$((FAILED + 1))
+fi
+
+# Vérifier que l'espace de travail est propre
+if [[ -z "$(git status --porcelain)" ]]; then
+    printf "  \033[0;32m✔\033[0m Espace de travail propre après commit de suppression\n"
+    PASSED=$((PASSED + 1))
+else
+    printf "  \033[0;31m✘\033[0m Espace de travail avec résidus après commit de suppression\n"
+    FAILED=$((FAILED + 1))
+fi
+
 echo
 if (( FAILED > 0 )); then
     printf "\033[0;31mÉchec : %d test(s) échoué(s) sur %d.\033[0m\n" "$FAILED" "$((PASSED + FAILED))"
