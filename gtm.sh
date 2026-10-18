@@ -49,18 +49,20 @@ show_usage() {
 Usage: gtm <plan|validate|dry-run|run|test> [options] [chemin/vers/plan.json]
        gtm <doctor|--doctor>
        gtm <model|config> [nom|--list]
+       gtm <lang> [code]
        gtm <update|--update|-update|--u|-u>
 
 Commandes :
   plan     [options] [plan.json] Génère automatiquement un plan de commits via le SLM local configuré.
-                                 Options : -a/--all, --dry-run, --date-strategy <last|first>, --start-date YYYY-MM-DD
+                                 Options : -a/--all, -l/--lang <en|fr|...>, --dry-run, --date-strategy <last|first>, --start-date YYYY-MM-DD
   validate [plan.json]           Vérifie la conformité et la chronologie du plan JSON.
   dry-run  [plan.json]           Simule l'exécution sans toucher à Git.
   run      [plan.json]           Exécute les commits du plan dans le dépôt courant.
   test                           Lance l'intégralité de la suite de tests automatisés (unitaires et intégration).
   model    [nom|--list]          Affiche, sélectionne ou définit le modèle SLM par défaut dans config.env.
                                  (Sans argument: menu interactif de sélection parmi les modèles locaux).
-  doctor                         Diagnostique l'environnement (Git, jq, date, Python, Ollama, modèle actif).
+  lang     [code]                Affiche ou définit la langue des messages dans config.env (défaut: en).
+  doctor                         Diagnostique l'environnement (Git, jq, date, Python, Ollama, modèle actif, langue).
   update                         Met à jour Git Tasks-Time Machine depuis le dépôt public.
                                  (Alias acceptés : --update, -update, --u, -u)
 
@@ -97,12 +99,21 @@ main() {
             shift
             model_cmd "$@"
             ;;
+        lang|language)
+            shift
+            lang_cmd "$@"
+            ;;
         config)
             shift
             if [[ "${1:-}" == "model" ]]; then
                 shift
+                model_cmd "$@"
+            elif [[ "${1:-}" == "lang" || "${1:-}" == "language" ]]; then
+                shift
+                lang_cmd "$@"
+            else
+                model_cmd "$@"
             fi
-            model_cmd "$@"
             ;;
         update|--update|-update|--u|-u)
             updater_run
