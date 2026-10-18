@@ -69,19 +69,21 @@ doctor_check_all() {
 
     if (( ollama_online == 1 )); then
         printf "• Modèle SLM    : "
+        local configured_model="${DEFAULT_MODEL:-qwen2.5-coder:1.5b}"
         local tags_json
         tags_json=$(curl -s --max-time 2 http://localhost:11434/api/tags 2>/dev/null || echo "{}")
-        if echo "$tags_json" | grep -q "qwen2.5-coder:1.5b"; then
-            echo "OK (qwen2.5-coder:1.5b détecté)"
+        if echo "$tags_json" | grep -q "\"name\":\"${configured_model}"; then
+            echo "OK ($configured_model détecté [actif dans config.env])"
         else
             local found_models
             found_models=$(echo "$tags_json" | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | tr '\n' ', ' | sed 's/, $//')
+            echo "NON DÉTECTÉ ('$configured_model' configuré mais absent d'Ollama)"
             if [[ -n "$found_models" ]]; then
-                echo "DISPONIBLE(S): $found_models"
-                echo "  -> Astuce: installez le modèle sobre par défaut avec: ollama pull qwen2.5-coder:1.5b"
+                echo "  -> Modèles présents sur cette machine : $found_models"
+                echo "  -> Pour basculer : gtm model <nom> (ou 'gtm model' pour le menu)"
+                echo "  -> Ou pour installer : ollama pull $configured_model"
             else
-                echo "AUCUN MODÈLE TÉLÉCHARGÉ"
-                echo "  -> Exécutez: ollama pull qwen2.5-coder:1.5b"
+                echo "  -> Aucun modèle téléchargé. Exécutez : ollama pull $configured_model"
             fi
         fi
     fi
