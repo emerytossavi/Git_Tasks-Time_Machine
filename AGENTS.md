@@ -67,7 +67,7 @@ gtm plan -m qwen2.5-coder:1.5b -o custom-plan.json
 ### 3.3. `gtm validate [plan.json]`
 Verifies the syntactic and semantic integrity of the commit plan:
 - JSON schema conformance.
-- File existence on the local filesystem.
+- File existence on the local filesystem (or tracked deleted files in Git history/index).
 - ISO 8601 timestamp compliance (`YYYY-MM-DDTHH:MM:SS[+-]HH:MM`).
 - Chronological ordering verification.
 - Conventional commit message header format.
@@ -84,7 +84,7 @@ gtm validate .gtm/commit-plan.json
 
 ### 3.4. `gtm dry-run [plan.json]`
 Performs a full dry-run simulation of the commit plan:
-- Resolves all file paths and globs.
+- Resolves all file paths and globs (annotating deleted files with `[supprimé]`).
 - Displays target commit dates and formatted messages.
 - Does NOT touch the Git index or object database.
 
@@ -97,7 +97,7 @@ gtm dry-run .gtm/commit-plan.json
 ### 3.5. `gtm run [plan.json]`
 Executes atomic staging and commits for each item in the plan:
 - Sets `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` per commit.
-- Stages exact file lists using `git add -f -- <files>`.
+- Stages exact file lists using `git add -A -- <files>` (safely capturing additions, modifications, and deletions).
 - Creates commits via `git commit -m "<message>"`.
 
 ```bash
@@ -220,7 +220,7 @@ If `gtm validate` fails during agent execution:
    - Inspect the dates in `commit-plan.json`.
    - Sort the array of `commits` chronologically ascending by `date`.
 3. If the error mentions `Fichier inexistant`:
-   - Check `git status` to ensure files have not been deleted or renamed.
-   - Adjust `files` array to match existing paths.
+   - Check if the file was deleted: ensure it was previously tracked in Git (in `HEAD` or staged).
+   - Otherwise, check `git status` and adjust `files` array to match existing paths.
 4. If the error mentions `Format de message invalide`:
    - Ensure the first line starts with `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9_-]+\))?: [a-z0-9]`.
