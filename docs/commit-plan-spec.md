@@ -14,6 +14,20 @@ Le fichier `commit-plan.json` est le contrat d'échange principal entre :
 1. Les moteurs de planification (l'utilisateur humain, le SLM local via `gtm plan`, ou un agent d'intelligence artificielle).
 2. Le moteur d'exécution et de validation (`gtm validate`, `gtm dry-run`, `gtm run`).
 
+### 1.1 Emplacement standard et isolation des résidus (`.gtm/`)
+
+Par défaut, le plan est généré et recherché dans le dossier dédié :
+```text
+.gtm/
+├── .gitignore         # Contient '*' pour ignorer 100% des fichiers du dossier
+└── commit-plan.json   # Plan de commits généré
+```
+
+**Garantie d'invisibilité Git (Zéro résidu)** :  
+Grâce au fichier `.gtm/.gitignore` généré automatiquement avec la directive `*`, le dossier `.gtm/` et l'ensemble de ses fichiers temporaires sont **totalement ignorés** par Git dans tout dépôt cible, sans qu'il soit nécessaire de modifier le fichier `.gitignore` racine de votre projet.
+
+*Rétrocompatibilité* : Si un fichier `commit-plan.json` existe à la racine du projet, `gtm` le prend en charge automatiquement en solution de repli.
+
 ---
 
 ## 2. Schéma JSON Formel
