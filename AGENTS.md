@@ -97,6 +97,19 @@ Executes atomic staging and commits for each item in the plan:
 gtm run commit-plan.json
 ```
 
+### 3.6. `gtm model [model_name|--list]`
+Inspects or persistently configures the default SLM model in `config.env`:
+
+```bash
+# List available generation models in local Ollama and show the active one
+gtm model --list
+
+# Set the default model for future gtm plan executions (writes to config.env)
+gtm model qwen2.5-coder:7b
+```
+- **Exit 0**: Model successfully listed or saved.
+- **Exit 1**: Unrecognized arguments or empty input.
+
 ---
 
 ## 4. Standard Agent Workflows
