@@ -48,8 +48,23 @@ def is_text_file(filepath: Path) -> bool:
     except Exception:
         return False
 
+def is_git_deleted(cwd: Path, rel_path: str) -> bool:
+    """Vérifie si un fichier est supprimé mais suivi dans Git (working tree ou staging)."""
+    try:
+        cmd = ["git", "status", "--porcelain", "--", rel_path]
+        res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+        if res.stdout:
+            for line in res.stdout.splitlines():
+                if "D" in line[:2]:
+                    return True
+        cmd_ls = ["git", "ls-files", "--error-unmatch", "--", rel_path]
+        res_ls = subprocess.run(cmd_ls, cwd=str(cwd), capture_output=True, text=True)
+        return res_ls.returncode == 0
+    except Exception:
+        return False
+
 def get_git_status_files(cwd: Path):
-    """Retourne la liste des fichiers modifiés ou non suivis selon git status (y compris dans les sous-dossiers)."""
+    """Retourne la liste des fichiers modifiés, supprimés ou non suivis selon git status (y compris dans les sous-dossiers)."""
     try:
         # -uall garantit que les fichiers dans les sous-dossiers non suivis sont tous listés individuellement
         # Git applique automatiquement l'ensemble des règles .gitignore du projet.
@@ -62,6 +77,7 @@ def get_git_status_files(cwd: Path):
                 continue
             parts = line.split(maxsplit=1)
             if len(parts) == 2:
+                status_code = parts[0]
                 path_str = parts[1]
                 if " -> " in path_str:
                     path_str = path_str.split(" -> ")[1]
@@ -71,6 +87,8 @@ def get_git_status_files(cwd: Path):
                 p = cwd / path_clean
                 if p.is_file() and p.stat().st_size < 50 * 1024 * 1024:
                     files.append(str(p.relative_to(cwd)))
+                elif not p.exists() and "D" in status_code:
+                    files.append(path_clean)
                 elif p.is_dir():
                     # Sécurité : si une entrée non suivie est un dossier brut
                     for root, _, filenames in os.walk(p):
@@ -200,6 +218,42 @@ def extract_file_intent(cwd: Path, rel_path: str, target_lang: str = "en"):
     rel_lower = rel_path.lower()
     is_fr = (target_lang or "").lower().startswith("fr")
     is_es = (target_lang or "").lower().startswith("es")
+
+    # 0. Fichier supprimé (absent du disque mais présent dans git)
+    if not full_path.exists():
+        stem_clean = Path(rel_path).stem.replace("_", " ").replace("-", " ")
+        removed_symbols = []
+        try:
+            cmd = ["git", "diff", "HEAD", "-U0", "--no-color", "--", rel_path]
+            res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+            if not res.stdout:
+                cmd = ["git", "diff", "--cached", "-U0", "--no-color", "--", rel_path]
+                res = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+            if res.stdout:
+                for l in res.stdout.splitlines():
+                    if l.startswith("-") and not l.startswith("---"):
+                        m = re.search(r'(?:def|class|function|async def)\s+([a-zA-Z0-9_]+)', l[1:])
+                        if m and m.group(1) not in removed_symbols:
+                            removed_symbols.append(m.group(1))
+        except Exception:
+            pass
+
+        if removed_symbols:
+            sym_str = ", ".join(removed_symbols[:3])
+            sym_all = ", ".join(removed_symbols[:5])
+            if is_fr:
+                return f"supprimer {sym_str}", f"suppression de {sym_all} ({rel_path})"
+            elif is_es:
+                return f"eliminar {sym_str}", f"eliminación de {sym_all} ({rel_path})"
+            else:
+                return f"remove {sym_str}", f"remove {sym_all} ({rel_path})"
+
+        if is_fr:
+            return f"supprimer {stem_clean}", f"suppression de {rel_path}"
+        elif is_es:
+            return f"eliminar {stem_clean}", f"eliminación de {rel_path}"
+        else:
+            return f"remove {stem_clean}", f"remove {rel_path}"
 
     # 1. Fichiers binaires & archives d'exemple
     if ext_lower in BINARY_EXTENSIONS or ext_lower in (".zip", ".tar", ".gz", ".7z", ".pdf", ".png", ".jpg", ".jpeg", ".ico", ".svg"):
@@ -474,7 +528,7 @@ def extract_file_intent(cwd: Path, rel_path: str, target_lang: str = "en"):
         return f"implementar las funcionalidades de {stem_clean}", f"lógica y configuración para {stem_clean}"
     return f"implement {stem_clean} functionality", f"logic and configuration for {stem_clean}"
 
-def categorize_file(rel_path: str):
+def categorize_file(rel_path: str, is_deleted: bool = False):
     """Détermine le type Conventional Commit, le scope recommandé et la catégorie logique du fichier."""
     p = Path(rel_path)
     name = p.name.lower()
@@ -506,12 +560,17 @@ def categorize_file(rel_path: str):
         scope = clean_scope_name(dir_cand)
     else:
         scope = clean_scope_name(p.stem)
+
+    if is_deleted:
+        return {"type": "refactor", "scope": scope, "category": scope}
+
     return {"type": "feat", "scope": scope, "category": scope}
 
 def analyze_file(cwd: Path, rel_path: str, target_lang: str = "en"):
     """Analyse légère: extrait les imports, définitions clés, rôle et intention sémantique profonde."""
     full_path = cwd / rel_path
-    cat = categorize_file(rel_path)
+    is_deleted = not full_path.exists() and is_git_deleted(cwd, rel_path)
+    cat = categorize_file(rel_path, is_deleted=is_deleted)
 
     symbols = []
     imports = []
@@ -811,6 +870,11 @@ def assign_timestamps(commits, cwd: Path, start_date=None, strategy="last"):
                     mtimes.append(os.path.getmtime(p))
                 except Exception:
                     pass
+            elif p.parent.exists():
+                try:
+                    mtimes.append(os.path.getmtime(p.parent))
+                except Exception:
+                    pass
 
         if mtimes:
             raw_time = min(mtimes) if strategy == "first" else max(mtimes)
@@ -1031,7 +1095,7 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
     for c in commits:
         filtered_files = []
         for f in c.get("files", []):
-            if f in target_set and f not in assigned_files and (cwd / f).exists():
+            if f in target_set and f not in assigned_files and ((cwd / f).exists() or is_git_deleted(cwd, f)):
                 filtered_files.append(f)
                 assigned_files.add(f)
         if filtered_files:
@@ -1082,7 +1146,7 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
             cleaned_commits.append(c)
 
     # Réconciliation des orphelins (fichiers ciblés mais non cités par le modèle)
-    unassigned = [f for f in all_files if f not in assigned_files and (cwd / f).exists()]
+    unassigned = [f for f in all_files if f not in assigned_files and ((cwd / f).exists() or is_git_deleted(cwd, f))]
     if unassigned:
         docs_orphans = [f for f in unassigned if any(x in f.lower() for x in ["readme", "license", "doc", "guide"])]
         code_orphans = [f for f in unassigned if f not in docs_orphans]
