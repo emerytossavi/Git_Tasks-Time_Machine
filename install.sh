@@ -36,12 +36,17 @@ print_report "OK" "Lien créé : $BIN_DIR/gtm -> $GTM_SRC"
 
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   RC_FILE="$HOME/.bashrc"
+  if [[ "${SHELL:-}" == *"zsh"* ]] || [[ "${OSTYPE:-}" == "darwin"* && -f "$HOME/.zshrc" ]]; then
+    RC_FILE="$HOME/.zshrc"
+  elif [[ ! -f "$HOME/.bashrc" && -f "$HOME/.zshrc" ]]; then
+    RC_FILE="$HOME/.zshrc"
+  fi
   EXPORT_LINE="export PATH=\"$BIN_DIR:\$PATH\""
 
   if [[ -f "$RC_FILE" ]] && grep -qF "$EXPORT_LINE" "$RC_FILE" 2>/dev/null; then
     print_report "INFO" "$BIN_DIR est déjà ajouté dans $RC_FILE (redémarre le terminal)"
   else
-    printf '\n# Ajouté par git-helpers/install.sh\n%s\n' "$EXPORT_LINE" >> "$RC_FILE"
+    printf '\n# Ajouté par Git_Tasks-Time_Machine/install.sh\n%s\n' "$EXPORT_LINE" >> "$RC_FILE"
     print_report "OK" "$BIN_DIR ajouté au PATH dans $RC_FILE"
   fi
 
