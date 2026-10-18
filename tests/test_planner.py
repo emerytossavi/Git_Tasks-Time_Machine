@@ -70,6 +70,33 @@ class TestPlannerUnit(unittest.TestCase):
             planner.sanitize_commit_header("docs(readme): Update installation instructions"),
             "docs(readme): update installation instructions"
         )
+        # Élimination des scopes tautologiques (ex: test(test) -> test, docs(docs) -> docs)
+        self.assertEqual(
+            planner.sanitize_commit_header("test(test): update unit tests"),
+            "test: update unit tests"
+        )
+        self.assertEqual(
+            planner.sanitize_commit_header("docs(docs): update documentation"),
+            "docs: update documentation"
+        )
+        self.assertEqual(
+            planner.sanitize_commit_header("chore(chore): update dependencies"),
+            "chore: update dependencies"
+        )
+        # Nettoyage des numérotations brutes de sections markdown (ex: add 1. L'Essence...)
+        self.assertEqual(
+            planner.sanitize_commit_header("docs: add 1. L'Essence du Projet"),
+            "docs: add L'Essence du Projet"
+        )
+        # Support des verbes impératifs en français sans ajout intempestif de 'add'
+        self.assertEqual(
+            planner.sanitize_commit_header("feat(auth): implémenter la connexion OAuth", target_lang="fr"),
+            "feat(auth): implémenter la connexion OAuth"
+        )
+        self.assertEqual(
+            planner.sanitize_commit_header("docs(api): documenter les endpoints API", target_lang="fr"),
+            "docs(api): documenter les endpoints API"
+        )
 
     def test_reconcile_and_clean_commits_returns_list_never_none(self):
         """Vérifie que reconcile_and_clean_commits renvoie TOUJOURS une liste (régression du return manquant)."""
@@ -211,5 +238,53 @@ class TestPlannerUnit(unittest.TestCase):
         res = subprocess.run(["git", "status", "--porcelain"], cwd=str(self.cwd), capture_output=True, text=True, check=True)
         self.assertEqual(res.stdout.strip(), "", "Le dossier .gtm ne doit laisser aucun résidu dans git status")
 
+    def test_language_configuration_and_naming(self):
+        """Vérifie la résolution de la langue configurée et le mappage des noms de langues."""
+        # Noms de langues
+        self.assertEqual(planner.get_language_name("en"), "English")
+        self.assertEqual(planner.get_language_name("fr"), "French")
+        self.assertEqual(planner.get_language_name("es"), "Spanish")
+        self.assertEqual(planner.get_language_name("de"), "German")
+        self.assertEqual(planner.get_language_name("custom"), "custom")
+
+        # Résolution de DEFAULT_LANG via variable d'environnement
+        old_lang = os.environ.get("DEFAULT_LANG")
+        try:
+            os.environ["DEFAULT_LANG"] = "fr"
+            self.assertEqual(planner.get_configured_default_lang(), "fr")
+            os.environ["DEFAULT_LANG"] = "es"
+            self.assertEqual(planner.get_configured_default_lang(), "es")
+        finally:
+            if old_lang is not None:
+                os.environ["DEFAULT_LANG"] = old_lang
+            else:
+                os.environ.pop("DEFAULT_LANG", None)
+
+    def test_extract_file_intent_multilingual(self):
+        """Vérifie que extract_file_intent produit des résumés adaptés à la langue cible."""
+        readme = self.cwd / "README.md"
+        readme.write_text("# Project")
+
+        # Test anglais
+        summary_en, details_en = planner.extract_file_intent(self.cwd, "README.md", target_lang="en")
+        self.assertIn("document", summary_en.lower())
+        self.assertIn("architecture", summary_en.lower())
+
+        # Test français
+        summary_fr, details_fr = planner.extract_file_intent(self.cwd, "README.md", target_lang="fr")
+        self.assertIn("documenter", summary_fr.lower())
+        self.assertIn("architecture", summary_fr.lower())
+
+        # Test espagnol
+        summary_es, details_es = planner.extract_file_intent(self.cwd, "README.md", target_lang="es")
+        self.assertIn("documentar", summary_es.lower())
+
+    def test_categorize_file_docs_precedence_over_spec(self):
+        """Vérifie que les spécifications documentaires (ex: commit-plan-spec.md) sont bien classées en docs et non en test."""
+        cat = planner.categorize_file("docs/commit-plan-spec.md")
+        self.assertEqual(cat["type"], "docs")
+        self.assertEqual(cat["scope"], "docs")
+
 if __name__ == "__main__":
     unittest.main()
+
