@@ -29,12 +29,17 @@ BINARY_EXTENSIONS = {
     ".mp3", ".mp4", ".mov", ".avi", ".woff", ".woff2", ".ttf", ".eot"
 }
 
-def is_system_excluded(rel_path: str) -> bool:
+def is_system_excluded(rel_path: str, cwd: Path = None) -> bool:
     """Vérifie si un chemin fait partie des exclusions système indispensables (.git, .gtm, commit-plan.json, .DS_Store)."""
     p = Path(rel_path)
     if any(part in (".git", ".gtm") for part in p.parts):
         return True
-    if p.name == ".DS_Store" or p.name == "commit-plan.json":
+    if p.name == ".DS_Store":
+        return True
+    if p.name == "commit-plan.json":
+        # Si commit-plan.json était suivi dans Git et a été supprimé, sa suppression doit être prise en compte
+        if cwd and is_git_deleted(cwd, rel_path):
+            return False
         return True
     return False
 
@@ -82,7 +87,7 @@ def get_git_status_files(cwd: Path):
                 if " -> " in path_str:
                     path_str = path_str.split(" -> ")[1]
                 path_clean = path_str.strip('"')
-                if is_system_excluded(path_clean):
+                if is_system_excluded(path_clean, cwd=cwd):
                     continue
                 p = cwd / path_clean
                 if p.is_file() and p.stat().st_size < 50 * 1024 * 1024:
@@ -95,7 +100,7 @@ def get_git_status_files(cwd: Path):
                         for fn in filenames:
                             sub_p = Path(root) / fn
                             rel_sub = str(sub_p.relative_to(cwd))
-                            if not is_system_excluded(rel_sub) and sub_p.is_file() and sub_p.stat().st_size < 50 * 1024 * 1024:
+                            if not is_system_excluded(rel_sub, cwd=cwd) and sub_p.is_file() and sub_p.stat().st_size < 50 * 1024 * 1024:
                                 files.append(rel_sub)
         return files
     except Exception:
@@ -109,10 +114,12 @@ def get_all_git_files(cwd: Path):
         files = []
         for line in res.stdout.splitlines():
             line = line.strip().strip('"')
-            if not line or is_system_excluded(line):
+            if not line or is_system_excluded(line, cwd=cwd):
                 continue
             p = cwd / line
             if p.is_file() and p.stat().st_size < 50 * 1024 * 1024:
+                files.append(line)
+            elif not p.exists() and is_git_deleted(cwd, line):
                 files.append(line)
         return files
     except Exception:
@@ -161,11 +168,11 @@ def scan_directory(cwd: Path, all_files=False):
     patterns = parse_gitignore(cwd)
     selected = []
     for root, dirs, files in os.walk(cwd):
-        dirs[:] = [d for d in dirs if not is_system_excluded(d) and not matches_gitignore(d, patterns)]
+        dirs[:] = [d for d in dirs if not is_system_excluded(d, cwd=cwd) and not matches_gitignore(d, patterns)]
         for f in files:
             p = Path(root) / f
             rel_p = str(p.relative_to(cwd))
-            if is_system_excluded(rel_p) or matches_gitignore(rel_p, patterns):
+            if is_system_excluded(rel_p, cwd=cwd) or matches_gitignore(rel_p, patterns):
                 continue
             if p.is_file() and p.stat().st_size < 50 * 1024 * 1024:
                 selected.append(rel_p)
