@@ -42,7 +42,7 @@ done
 
 # 3. Initialisation de la configuration
 config_init "$SOURCE"
-config_set_plan_file "${2:-commit-plan.json}"
+config_set_plan_file "${2:-}"
 
 show_usage() {
     cat <<USAGE
@@ -64,9 +64,9 @@ Commandes :
   update                         Met à jour Git Tasks-Time Machine depuis le dépôt public.
                                  (Alias acceptés : --update, -update, --u, -u)
 
-Si le chemin du plan est omis, "./commit-plan.json" (relatif au
-dossier courant) est utilisé. "run" et "dry-run" opèrent toujours
-sur le dépôt Git du dossier courant.
+Si le chemin du plan est omis, ".gtm/commit-plan.json" (ou "./commit-plan.json"
+pour rétrocompatibilité) relatif au dossier courant est utilisé. "run" et "dry-run"
+opèrent toujours sur le dépôt Git du dossier courant.
 USAGE
 }
 
@@ -87,6 +87,7 @@ main() {
                 log_error "Python 3 est requis pour la génération de plan avec le SLM local."
                 exit 1
             fi
+            config_ensure_gtm_dir ".gtm"
             python3 "$GTM_DIR/lib/planner.py" "$@"
             ;;
         doctor|--doctor)
