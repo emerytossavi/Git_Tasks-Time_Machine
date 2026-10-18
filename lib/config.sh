@@ -25,7 +25,13 @@ config_init() {
     GTM_DIR="$(cd -P "$(dirname "$source_script")" && pwd)"
     GTM_FILE="$GTM_DIR/$(basename "$source_script")"
 
-    # Charger le fichier config.env s'il est présent
+    # 1. Charger la configuration de base modèle config.env.example si présente
+    if [[ -f "$GTM_DIR/config.env.example" ]]; then
+        # shellcheck disable=SC1091
+        source "$GTM_DIR/config.env.example"
+    fi
+
+    # 2. Charger le fichier config.env privé s'il est présent (surcharges locales)
     if [[ -f "$GTM_DIR/config.env" ]]; then
         # shellcheck disable=SC1091
         source "$GTM_DIR/config.env"
@@ -72,6 +78,28 @@ config_set_plan_file() {
     fi
 }
 
+config_ensure_file() {
+    local config_file="$GTM_DIR/config.env"
+    if [[ ! -f "$config_file" ]]; then
+        if [[ -f "$GTM_DIR/config.env.example" ]]; then
+            cp "$GTM_DIR/config.env.example" "$config_file"
+        else
+            cat <<EOF > "$config_file"
+# Git Tasks-Time Machine Configuration
+# Standards: POSIX shell variable assignment / sourceable config
+
+REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
+REPO_BRANCH="main"
+RAW_FILE_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
+
+DEFAULT_MODEL="qwen2.5-coder:1.5b"
+OLLAMA_HOST="http://localhost:11434"
+DEFAULT_LANG="en"
+EOF
+        fi
+    fi
+}
+
 config_set_default_model() {
     local new_model="$1"
     local config_file="$GTM_DIR/config.env"
@@ -83,19 +111,9 @@ config_set_default_model() {
     # Nettoyer les guillemets ou espaces superflus
     new_model="$(echo "$new_model" | tr -d '\"'"'" | tr -d ' ')"
 
-    if [[ ! -f "$config_file" ]]; then
-        cat <<EOF > "$config_file"
-# Git Tasks-Time Machine Configuration
-# Standards: POSIX shell variable assignment / sourceable config
+    config_ensure_file
 
-REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
-REPO_BRANCH="main"
-RAW_FILE_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
-
-# Modèle SLM local par défaut pour 'gtm plan'
-DEFAULT_MODEL="$new_model"
-EOF
-    elif grep -q "^DEFAULT_MODEL=" "$config_file" 2>/dev/null; then
+    if grep -q "^DEFAULT_MODEL=" "$config_file" 2>/dev/null; then
         local tmp_file
         tmp_file="$(mktemp "${TMPDIR:-/tmp}/gtm_config.XXXXXX")"
         sed "s|^DEFAULT_MODEL=.*|DEFAULT_MODEL=\"$new_model\"|" "$config_file" > "$tmp_file"
@@ -123,22 +141,9 @@ config_set_ollama_host() {
     fi
     new_host="${new_host%/}"
 
-    if [[ ! -f "$config_file" ]]; then
-        cat <<EOF > "$config_file"
-# Git Tasks-Time Machine Configuration
-# Standards: POSIX shell variable assignment / sourceable config
+    config_ensure_file
 
-REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
-REPO_BRANCH="main"
-RAW_FILE_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
-
-# Modèle SLM local par défaut pour 'gtm plan'
-DEFAULT_MODEL="qwen2.5-coder:1.5b"
-
-# Hôte du serveur Ollama
-OLLAMA_HOST="$new_host"
-EOF
-    elif grep -q "^OLLAMA_HOST=" "$config_file" 2>/dev/null; then
+    if grep -q "^OLLAMA_HOST=" "$config_file" 2>/dev/null; then
         local tmp_file
         tmp_file="$(mktemp "${TMPDIR:-/tmp}/gtm_config.XXXXXX")"
         sed "s|^OLLAMA_HOST=.*|OLLAMA_HOST=\"$new_host\"|" "$config_file" > "$tmp_file"
@@ -162,20 +167,9 @@ config_set_default_lang() {
     # Nettoyer les guillemets ou espaces superflus et convertir en minuscules
     new_lang="$(echo "$new_lang" | tr -d '\"'"'" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
 
-    if [[ ! -f "$config_file" ]]; then
-        cat <<EOF > "$config_file"
-# Git Tasks-Time Machine Configuration
-# Standards: POSIX shell variable assignment / sourceable config
+    config_ensure_file
 
-REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
-REPO_BRANCH="main"
-RAW_FILE_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
-
-DEFAULT_MODEL="qwen2.5-coder:1.5b"
-OLLAMA_HOST="http://localhost:11434"
-DEFAULT_LANG="$new_lang"
-EOF
-    elif grep -q "^DEFAULT_LANG=" "$config_file" 2>/dev/null; then
+    if grep -q "^DEFAULT_LANG=" "$config_file" 2>/dev/null; then
         local tmp_file
         tmp_file="$(mktemp "${TMPDIR:-/tmp}/gtm_config.XXXXXX")"
         sed "s|^DEFAULT_LANG=.*|DEFAULT_LANG=\"$new_lang\"|" "$config_file" > "$tmp_file"
