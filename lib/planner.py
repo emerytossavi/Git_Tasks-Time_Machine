@@ -34,7 +34,7 @@ def is_system_excluded(rel_path: str, cwd: Path = None) -> bool:
     p = Path(rel_path)
     if any(part in (".git", ".gtm") for part in p.parts):
         return True
-    if p.name == ".DS_Store":
+    if p.name == ".DS_Store" or p.name == "config.env":
         return True
     if p.name == "commit-plan.json":
         # Si commit-plan.json était suivi dans Git et a été supprimé, sa suppression doit être prise en compte
@@ -648,26 +648,33 @@ def get_language_name(lang_code: str) -> str:
     code = (lang_code or "en").strip().lower()
     return SUPPORTED_LANGUAGES.get(code, code)
 
+def read_config_var(var_names: list, fallback: str = "") -> str:
+    """Lit une variable depuis l'environnement, puis config.env, puis config.env.example."""
+    for vn in var_names:
+        val = os.environ.get(vn, "").strip()
+        if val:
+            return val
+
+    root_dir = Path(__file__).resolve().parent.parent
+    for fname in ("config.env", "config.env.example"):
+        cfg_file = root_dir / fname
+        if cfg_file.is_file():
+            try:
+                with open(cfg_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        for vn in var_names:
+                            if line.startswith(f"{vn}="):
+                                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                if val:
+                                    return val
+            except Exception:
+                pass
+    return fallback
+
 def get_configured_default_lang() -> str:
-    """Récupère la langue configurée dans l'environnement (DEFAULT_LANG) ou dans config.env (défaut: 'en')."""
-    env_lang = os.environ.get("DEFAULT_LANG", "").strip().lower()
-    if env_lang:
-        return env_lang
-
-    config_path = Path(__file__).resolve().parent.parent / "config.env"
-    if config_path.is_file():
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("DEFAULT_LANG="):
-                        val = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
-                        if val:
-                            return val
-        except Exception:
-            pass
-
-    return "en"
+    """Récupère la langue configurée dans l'environnement (DEFAULT_LANG) ou dans config.env / config.env.example (défaut: 'en')."""
+    return read_config_var(["DEFAULT_LANG"], fallback="en").lower()
 
 def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url=None, target_lang="en"):
     """Appelle Ollama avec sortie JSON contrainte, types standards et langue configurée."""
@@ -1190,47 +1197,12 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
     return cleaned_commits
 
 def get_configured_default_model() -> str:
-    """Récupère le modèle configuré dans l'environnement ou dans config.env."""
-    env_model = os.environ.get("DEFAULT_MODEL", "").strip()
-    if env_model:
-        return env_model
-
-    config_path = Path(__file__).resolve().parent.parent / "config.env"
-    if config_path.is_file():
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith("DEFAULT_MODEL="):
-                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                        if val:
-                            return val
-        except Exception:
-            pass
-
-    return "qwen2.5-coder:1.5b"
+    """Récupère le modèle configuré dans l'environnement ou dans config.env / config.env.example."""
+    return read_config_var(["DEFAULT_MODEL"], fallback="qwen2.5-coder:1.5b")
 
 def get_configured_ollama_host() -> str:
-    """Récupère l'hôte Ollama configuré dans l'environnement (OLLAMA_HOST, OLLAMA_BASE_URL) ou dans config.env."""
-    env_host = os.environ.get("OLLAMA_HOST", "").strip() or os.environ.get("OLLAMA_BASE_URL", "").strip()
-    if env_host:
-        host = env_host
-    else:
-        host = "http://localhost:11434"
-        config_path = Path(__file__).resolve().parent.parent / "config.env"
-        if config_path.is_file():
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("OLLAMA_HOST=") or line.startswith("OLLAMA_BASE_URL="):
-                            val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                            if val:
-                                host = val
-                                break
-            except Exception:
-                pass
-
+    """Récupère l'hôte Ollama configuré dans l'environnement ou dans config.env / config.env.example."""
+    host = read_config_var(["OLLAMA_HOST", "OLLAMA_BASE_URL"], fallback="http://localhost:11434")
     if not host.startswith("http://") and not host.startswith("https://"):
         host = f"http://{host}"
     return host.rstrip("/")
