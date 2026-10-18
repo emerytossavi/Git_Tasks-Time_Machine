@@ -18,6 +18,7 @@ import random
 
 SYSTEM_EXCLUDES = {
     ".git",
+    ".gtm",
     ".DS_Store",
     "commit-plan.json"
 }
@@ -29,9 +30,9 @@ BINARY_EXTENSIONS = {
 }
 
 def is_system_excluded(rel_path: str) -> bool:
-    """Vérifie si un chemin fait partie des exclusions système indispensables (.git, commit-plan.json, .DS_Store)."""
+    """Vérifie si un chemin fait partie des exclusions système indispensables (.git, .gtm, commit-plan.json, .DS_Store)."""
     p = Path(rel_path)
-    if any(part == ".git" for part in p.parts):
+    if any(part in (".git", ".gtm") for part in p.parts):
         return True
     if p.name == ".DS_Store" or p.name == "commit-plan.json":
         return True
@@ -1032,7 +1033,7 @@ def main():
     default_model = get_configured_default_model()
     default_host = get_configured_ollama_host()
     parser = argparse.ArgumentParser(description=f"Générateur sobre de commit-plan.json via SLM local (défaut: {default_model}).")
-    parser.add_argument("plan_file", nargs="?", default="commit-plan.json", help="Fichier de sortie (défaut: commit-plan.json)")
+    parser.add_argument("plan_file", nargs="?", default=".gtm/commit-plan.json", help="Fichier de sortie (défaut: .gtm/commit-plan.json)")
     parser.add_argument("-o", "--output", default=None, help="Chemin alternatif du fichier de sortie")
     parser.add_argument("-a", "--all", action="store_true", help="Analyser tous les fichiers du dossier (pas uniquement git status)")
     parser.add_argument("-m", "--model", default=default_model, help=f"Modèle Ollama (défaut configuré: {default_model})")
@@ -1164,6 +1165,19 @@ def main():
     out_path = Path(output_file)
     if not out_path.is_absolute():
         out_path = cwd / out_path
+
+    # Assurer que le répertoire parent existe (ex: .gtm/)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Si le fichier est écrit dans un dossier .gtm, créer le .gitignore protecteur avec '*'
+    if out_path.parent.name == ".gtm" or any(part == ".gtm" for part in out_path.parts):
+        gtm_gitignore = out_path.parent / ".gitignore"
+        if not gtm_gitignore.exists():
+            try:
+                with open(gtm_gitignore, "w", encoding="utf-8") as gf:
+                    gf.write("*\n")
+            except Exception:
+                pass
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(plan_json + "\n")
