@@ -305,6 +305,26 @@ Si vous souhaitez utiliser un autre modèle via `gtm plan -m <nom>`, respectez c
 
 ---
 
+## ⚙️ Configuration personnalisée (`config.env`)
+
+Le fichier `config.env` situé à la racine de GTM vous permet de personnaliser l'environnement selon vos contraintes d'infrastructure ou de sécurité :
+
+```bash
+# Modèle SLM/LLM par défaut utilisé par 'gtm plan'
+DEFAULT_MODEL="qwen2.5-coder:1.5b"
+
+# Hôte / Serveur Ollama (défaut: http://localhost:11434)
+# Permet de cibler une machine GPU dédiée sur le réseau local ou un port alternatif :
+# OLLAMA_HOST="http://192.168.1.50:11434"
+# OLLAMA_HOST="http://localhost:11435"
+OLLAMA_HOST="http://localhost:11434"
+```
+
+> [!TIP]
+> Si vous utilisez un serveur Ollama distant ou un port non standard, configurez simplement `OLLAMA_HOST` dans `config.env` ou exportez la variable d'environnement standard `export OLLAMA_HOST="http://ip-serveur:port"`. GTM adaptera automatiquement les diagnostics (`gtm doctor`), les requêtes d'inférence (`gtm plan`) et la liste des modèles (`gtm model`).
+
+---
+
 ## 📋 Format du plan (`commit-plan.json`)
 
 Le plan JSON décrit la séquence des commits à exécuter. Il vit dans votre projet cible :
