@@ -101,12 +101,19 @@ doctor_check_all() {
     fi
 
     printf "• Fichier plan    : "
-    if [[ -f "commit-plan.json" ]]; then
+    local plan_path=""
+    if [[ -f ".gtm/commit-plan.json" ]]; then
+        plan_path=".gtm/commit-plan.json"
+    elif [[ -f "commit-plan.json" ]]; then
+        plan_path="commit-plan.json"
+    fi
+
+    if [[ -n "$plan_path" ]]; then
         local nb_commits
-        nb_commits=$(jq '.commits | length' commit-plan.json 2>/dev/null || echo "0")
-        echo "Présent (commit-plan.json avec $nb_commits commit(s))"
+        nb_commits=$(jq '.commits | length' "$plan_path" 2>/dev/null || echo "0")
+        echo "Présent ($plan_path avec $nb_commits commit(s))"
     else
-        echo "Absent (non bloquant - générable via 'gtm plan')"
+        echo "Absent (.gtm/commit-plan.json - générable via 'gtm plan')"
     fi
 
     echo
