@@ -14,6 +14,9 @@ cd "$SANDBOX"
 
 # Initialiser un faux dépôt pour isoler l'exécution
 git init -q
+git config user.name "GTM Test"
+git config user.email "gtm-test@example.com"
+git config commit.gpgsign false
 echo "hello" > file1.txt
 echo "world" > file2.txt
 
@@ -132,6 +135,26 @@ rm -rf .gtm
 cp valid_plan.json commit-plan.json
 assert_exit_code "gtm validate repli rétrocompatible sur commit-plan.json" 0 "$PROJECT_ROOT/gtm.sh" validate
 rm -f commit-plan.json
+
+# 9. Plan avec fichier suivi supprimé (doit être validé avec succès)
+echo "obsolete content" > to_delete.txt
+git add to_delete.txt
+git commit -q --no-gpg-sign -m "chore: add to_delete"
+rm -f to_delete.txt
+
+cat <<EOF > deleted_file_plan.json
+{
+  "commits": [
+    {
+      "date": "2026-10-18T10:00:00+01:00",
+      "message": "refactor: remove obsolete file",
+      "files": ["to_delete.txt"]
+    }
+  ]
+}
+EOF
+assert_exit_code "Plan avec fichier suivi supprimé accepté" 0 "$PROJECT_ROOT/gtm.sh" validate deleted_file_plan.json
+rm -f deleted_file_plan.json
 
 echo
 if (( FAILED > 0 )); then
