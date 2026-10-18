@@ -16,6 +16,12 @@ fi
 chmod +x "$GTM_SRC"
 chmod +x "$REPO_DIR"/lib/*.sh 2>/dev/null || true
 
+# Initialisation de la configuration locale privée à partir du modèle si absente
+if [[ ! -f "$REPO_DIR/config.env" && -f "$REPO_DIR/config.env.example" ]]; then
+  cp "$REPO_DIR/config.env.example" "$REPO_DIR/config.env"
+  print_report "OK" "Configuration locale créée : config.env (ignorée par Git)"
+fi
+
 # Choix du dossier bin : celui déjà présent et déjà dans le PATH est
 # préféré, sinon ~/.local/bin (convention Linux), sinon ~/bin (Git Bash).
 BIN_DIR=""
@@ -36,12 +42,17 @@ print_report "OK" "Lien créé : $BIN_DIR/gtm -> $GTM_SRC"
 
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   RC_FILE="$HOME/.bashrc"
+  if [[ "${SHELL:-}" == *"zsh"* ]] || [[ "${OSTYPE:-}" == "darwin"* && -f "$HOME/.zshrc" ]]; then
+    RC_FILE="$HOME/.zshrc"
+  elif [[ ! -f "$HOME/.bashrc" && -f "$HOME/.zshrc" ]]; then
+    RC_FILE="$HOME/.zshrc"
+  fi
   EXPORT_LINE="export PATH=\"$BIN_DIR:\$PATH\""
 
   if [[ -f "$RC_FILE" ]] && grep -qF "$EXPORT_LINE" "$RC_FILE" 2>/dev/null; then
     print_report "INFO" "$BIN_DIR est déjà ajouté dans $RC_FILE (redémarre le terminal)"
   else
-    printf '\n# Ajouté par git-helpers/install.sh\n%s\n' "$EXPORT_LINE" >> "$RC_FILE"
+    printf '\n# Ajouté par Git_Tasks-Time_Machine/install.sh\n%s\n' "$EXPORT_LINE" >> "$RC_FILE"
     print_report "OK" "$BIN_DIR ajouté au PATH dans $RC_FILE"
   fi
 

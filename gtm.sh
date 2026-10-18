@@ -26,6 +26,8 @@ MODULES=(
     "validator.sh"
     "runner.sh"
     "updater.sh"
+    "doctor.sh"
+    "model.sh"
 )
 
 for module in "${MODULES[@]}"; do
@@ -40,51 +42,104 @@ done
 
 # 3. Initialisation de la configuration
 config_init "$SOURCE"
-config_set_plan_file "${2:-commit-plan.json}"
+config_set_plan_file "${2:-}"
 
 show_usage() {
     cat <<USAGE
-Usage: gtm <validate|dry-run|run> [chemin/vers/plan.json]
+Usage: gtm <plan|validate|dry-run|run|test> [options] [chemin/vers/plan.json]
+       gtm <doctor|--doctor>
+       gtm <model|config> [nom|--list]
+       gtm <lang> [code]
        gtm <update|--update|-update|--u|-u>
 
 Commandes :
-  validate [plan.json]  Vérifie la conformité du plan JSON.
-  dry-run  [plan.json]  Simule l'exécution sans toucher à Git.
-  run      [plan.json]  Exécute les commits du plan dans le dépôt courant.
-  update                Met à jour Git Tasks-Time Machine depuis le dépôt public.
-                        (Alias acceptés : --update, -update, --u, -u)
+  plan     [options] [plan.json] Génère automatiquement un plan de commits via le SLM local configuré.
+                                 Options : -a/--all, -l/--lang <en|fr|...>, --dry-run, --date-strategy <last|first>, --start-date YYYY-MM-DD
+  validate [plan.json]           Vérifie la conformité et la chronologie du plan JSON.
+  dry-run  [plan.json]           Simule l'exécution sans toucher à Git.
+  run      [plan.json]           Exécute les commits du plan dans le dépôt courant.
+  test                           Lance l'intégralité de la suite de tests automatisés (unitaires et intégration).
+  model    [nom|--list]          Affiche, sélectionne ou définit le modèle SLM par défaut dans config.env.
+                                 (Sans argument: menu interactif de sélection parmi les modèles locaux).
+  lang     [code]                Affiche ou définit la langue des messages dans config.env (défaut: en).
+  doctor                         Diagnostique l'environnement (Git, jq, date, Python, Ollama, modèle actif, langue).
+  update                         Met à jour Git Tasks-Time Machine depuis le dépôt public.
+                                 (Alias acceptés : --update, -update, --u, -u)
 
-Si le chemin du plan est omis, "./commit-plan.json" (relatif au
-dossier courant) est utilisé. "run" et "dry-run" opèrent toujours
-sur le dépôt Git du dossier courant.
+Si le chemin du plan est omis, ".gtm/commit-plan.json" (ou "./commit-plan.json"
+pour rétrocompatibilité) relatif au dossier courant est utilisé. "run" et "dry-run"
+opèrent toujours sur le dépôt Git du dossier courant.
 USAGE
 }
 
 main() {
-    if [[ $# -lt 1 || $# -gt 2 ]]; then
+    if [[ $# -lt 1 ]]; then
         show_usage
         exit 1
     fi
 
-    # Détection cross-platform de la commande de date
-    date_init_engine
-
     case "$1" in
+        help|--help|-h)
+            show_usage
+            exit 0
+            ;;
+        plan)
+            shift
+            if ! command -v python3 >/dev/null 2>&1; then
+                log_error "Python 3 est requis pour la génération de plan avec le SLM local."
+                exit 1
+            fi
+            config_ensure_gtm_dir ".gtm"
+            python3 "$GTM_DIR/lib/planner.py" "$@"
+            ;;
+        doctor|--doctor)
+            doctor_check_all
+            ;;
+        model|models)
+            shift
+            model_cmd "$@"
+            ;;
+        lang|language)
+            shift
+            lang_cmd "$@"
+            ;;
+        config)
+            shift
+            if [[ "${1:-}" == "model" ]]; then
+                shift
+                model_cmd "$@"
+            elif [[ "${1:-}" == "lang" || "${1:-}" == "language" ]]; then
+                shift
+                lang_cmd "$@"
+            else
+                model_cmd "$@"
+            fi
+            ;;
         update|--update|-update|--u|-u)
             updater_run
             ;;
         validate)
+            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            date_init_engine
             validator_validate_plan "$PLAN_FILE"
             ;;
         dry-run)
+            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            date_init_engine
             runner_dry_run "$PLAN_FILE"
             ;;
         run)
+            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            date_init_engine
             runner_run "$PLAN_FILE"
+            ;;
+        test|tests)
+            shift
+            "$GTM_DIR/tests/run_tests.sh" "$@"
             ;;
         *)
             log_error "Commande inconnue: $1"
-            log_info "Commandes disponibles: validate, dry-run, run, update (--u, -update)"
+            log_info "Commandes disponibles: plan, validate, dry-run, run, test, doctor, model, update (--u, -update)"
             exit 1
             ;;
     esac
