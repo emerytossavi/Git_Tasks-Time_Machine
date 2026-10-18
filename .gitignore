@@ -1,6 +1,9 @@
 .gitignore
 .claude/
 
+# Configuration locale privée (ignorée de Git, voir config.env.example)
+config.env
+
 commit-plan.json
 .gtm/
 __pycache__/
