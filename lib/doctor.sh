@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# lib/doctor.sh - Diagnostic de l'environnement et des dépendances GTM
+# Compatible: bash 3.2+ (macOS, Linux, Git Bash)
+
+doctor_check_all() {
+    echo "=== Diagnostic Git Tasks-Time Machine (gtm doctor) ==="
+    echo
+    local issues=0
+
+    # 1. Shell & Git
+    printf "• Shell bash    : "
+    if [[ -n "${BASH_VERSION:-}" ]]; then
+        echo "OK ($BASH_VERSION)"
+    else
+        echo "WARN (version non détectée)"
+    fi
+
+    printf "• Git CLI       : "
+    if command -v git >/dev/null 2>&1; then
+        local git_v
+        git_v=$(git --version | head -n1)
+        echo "OK ($git_v)"
+    else
+        echo "MANQUANT"
+        issues=$((issues + 1))
+    fi
+
+    # 2. jq
+    printf "• jq parser     : "
+    if command -v jq >/dev/null 2>&1; then
+        local jq_v
+        jq_v=$(jq --version 2>/dev/null || echo "installé")
+        echo "OK ($jq_v)"
+    else
+        echo "MANQUANT (requis pour le parsing JSON)"
+        issues=$((issues + 1))
+    fi
+
+    # 3. Date engine
+    printf "• Moteur date   : "
+    date_init_engine
+    if [[ "$DATE_STRATEGY" == "gnu" ]]; then
+        echo "OK (GNU date via $DATE_CMD)"
+    else
+        echo "OK (BSD date native macOS - note: 'brew install coreutils' recommandé pour gdate)"
+    fi
+
+    # 4. Python 3 (pour gtm plan)
+    printf "• Python 3      : "
+    if command -v python3 >/dev/null 2>&1; then
+        local py_v
+        py_v=$(python3 --version 2>&1 | head -n1)
+        echo "OK ($py_v)"
+    else
+        echo "MANQUANT (requis pour 'gtm plan')"
+        issues=$((issues + 1))
+    fi
+
+    # 5. Ollama daemon & modèles
+    printf "• Démon Ollama  : "
+    local ollama_online=0
+    if curl -s --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+        echo "OK (en ligne sur http://localhost:11434)"
+        ollama_online=1
+    else
+        echo "HORS LIGNE ou NON INSTALLÉ"
+        echo "  -> Note : requis pour 'gtm plan'. Lancez 'ollama serve' ou l'application Ollama."
+    fi
+
+    if (( ollama_online == 1 )); then
+        printf "• Modèle SLM    : "
+        local tags_json
+        tags_json=$(curl -s --max-time 2 http://localhost:11434/api/tags 2>/dev/null || echo "{}")
+        if echo "$tags_json" | grep -q "qwen2.5-coder:1.5b"; then
+            echo "OK (qwen2.5-coder:1.5b détecté)"
+        else
+            local found_models
+            found_models=$(echo "$tags_json" | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | tr '\n' ', ' | sed 's/, $//')
+            if [[ -n "$found_models" ]]; then
+                echo "DISPONIBLE(S): $found_models"
+                echo "  -> Astuce: installez le modèle sobre par défaut avec: ollama pull qwen2.5-coder:1.5b"
+            else
+                echo "AUCUN MODÈLE TÉLÉCHARGÉ"
+                echo "  -> Exécutez: ollama pull qwen2.5-coder:1.5b"
+            fi
+        fi
+    fi
+
+    echo
+    # 6. Contexte courant
+    printf "• Dépôt Git local : "
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        local root_dir
+        root_dir=$(git rev-parse --show-toplevel 2>/dev/null)
+        echo "OK ($root_dir)"
+    else
+        echo "Non (le dossier courant n'est pas un dépôt Git)"
+    fi
+
+    printf "• Fichier plan    : "
+    if [[ -f "commit-plan.json" ]]; then
+        local nb_commits
+        nb_commits=$(jq '.commits | length' commit-plan.json 2>/dev/null || echo "0")
+        echo "Présent (commit-plan.json avec $nb_commits commit(s))"
+    else
+        echo "Absent (non bloquant - générable via 'gtm plan')"
+    fi
+
+    echo
+    if (( issues == 0 )); then
+        log_ok "Environnement opérationnel pour GTM !"
+    else
+        log_warn "$issues dépendance(s) essentielle(s) manquante(s). Consultez le README.md pour l'installation."
+    fi
+}
