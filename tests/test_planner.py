@@ -39,6 +39,23 @@ class TestPlannerUnit(unittest.TestCase):
         self.assertFalse(planner.is_system_excluded("src/main.py"))
         self.assertFalse(planner.is_system_excluded("README.md"))
 
+    def test_is_system_excluded_allows_deleted_tracked_commit_plan(self):
+        """Vérifie que commit-plan.json n'est pas exclu s'il s'agit d'un fichier suivi supprimé."""
+        subprocess.run(["git", "init", "-q"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "user.name", "Tester"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=str(self.cwd), check=True)
+
+        plan = self.cwd / "commit-plan.json"
+        plan.write_text('{"commits": []}')
+        subprocess.run(["git", "add", "commit-plan.json"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "legacy plan"], cwd=str(self.cwd), check=True, capture_output=True)
+
+        plan.unlink()
+        self.assertFalse(planner.is_system_excluded("commit-plan.json", cwd=self.cwd))
+        status_files = planner.get_git_status_files(self.cwd)
+        self.assertIn("commit-plan.json", status_files)
+
     def test_clean_scope_name(self):
         self.assertEqual(planner.clean_scope_name("src"), "src")
         self.assertEqual(planner.clean_scope_name("API_Service"), "api-service")
@@ -366,6 +383,25 @@ class TestPlannerUnit(unittest.TestCase):
         self.assertEqual(len(assigned), 1)
         self.assertIn("date", assigned[0])
         self.assertTrue(len(assigned[0]["date"]) >= 19)
+
+    def test_get_all_git_files_includes_deleted_files(self):
+        """Vérifie que get_all_git_files (utilisé avec gtm plan -a) inclut aussi les fichiers suivis supprimés."""
+        subprocess.run(["git", "init", "-q"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "user.name", "Tester"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=str(self.cwd), check=True)
+
+        f1 = self.cwd / "active.py"
+        f2 = self.cwd / "to_delete.py"
+        f1.write_text("hello")
+        f2.write_text("obsolete")
+        subprocess.run(["git", "add", "."], cwd=str(self.cwd), check=True)
+        subprocess.run(["git", "commit", "--no-gpg-sign", "-m", "init"], cwd=str(self.cwd), check=True, capture_output=True)
+
+        f2.unlink()
+        files = planner.get_all_git_files(self.cwd)
+        self.assertIn("to_delete.py", files)
+        self.assertIn("active.py", files)
 
 if __name__ == "__main__":
     unittest.main()
