@@ -122,6 +122,17 @@ assert_exit_code "Plan avec message vide rejeté" 1 "$PROJECT_ROOT/gtm.sh" valid
 echo "{ commits: [ malformed" > malformed_plan.json
 assert_exit_code "JSON malformé rejeté" 1 "$PROJECT_ROOT/gtm.sh" validate malformed_plan.json
 
+# 7. Résolution automatique de .gtm/commit-plan.json (sans argument)
+mkdir -p .gtm
+cp valid_plan.json .gtm/commit-plan.json
+assert_exit_code "gtm validate sans argument résout .gtm/commit-plan.json" 0 "$PROJECT_ROOT/gtm.sh" validate
+
+# 8. Repli rétrocompatible sur commit-plan.json si .gtm/ absent
+rm -rf .gtm
+cp valid_plan.json commit-plan.json
+assert_exit_code "gtm validate repli rétrocompatible sur commit-plan.json" 0 "$PROJECT_ROOT/gtm.sh" validate
+rm -f commit-plan.json
+
 echo
 if (( FAILED > 0 )); then
     printf "\033[0;31mÉchec : %d test(s) échoué(s) sur %d.\033[0m\n" "$FAILED" "$((PASSED + FAILED))"
