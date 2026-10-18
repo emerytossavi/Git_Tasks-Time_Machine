@@ -50,7 +50,7 @@ Il **n'invente jamais de commits** : il inspecte en profondeur la sémantique de
 ```mermaid
 flowchart LR
     A["📂 Fichiers du projet\n(Diff ou --all)"] --> B["🧠 gtm plan\n(SLM Local Qwen 1.5B)"]
-    B --> C["📋 commit-plan.json\n(Sujet + Body obligatoire)"]
+    B --> C["📋 .gtm/commit-plan.json\n(Isolé via .gtm/.gitignore)"]
     C --> D["🔍 gtm validate\n(Contrôle chronologique)"]
     D --> E["🧪 gtm dry-run\n(Simulation visuelle)"]
     E --> F["🚀 gtm run\n(Commits Git réels)"]
@@ -165,7 +165,7 @@ Vérifie la présence et la version de :
 - Moteur de dates (`GNU date`, `gdate` ou `BSD date`)
 - Python 3
 - Démon Ollama en ligne (`http://localhost:11434`) et modèle SLM téléchargé
-- Dépôt Git courant et présence éventuelle de `commit-plan.json`
+- Dépôt Git courant et présence éventuelle de `.gtm/commit-plan.json` (ou `commit-plan.json`)
 
 ---
 
@@ -325,9 +325,9 @@ OLLAMA_HOST="http://localhost:11434"
 
 ---
 
-## 📋 Format du plan (`commit-plan.json`)
+## 📋 Format du plan (`.gtm/commit-plan.json`)
 
-Le plan JSON décrit la séquence des commits à exécuter. Il vit dans votre projet cible :
+Le plan JSON décrit la séquence des commits à exécuter. Par défaut, il est généré dans `.gtm/commit-plan.json` et isolé par un fichier `.gtm/.gitignore` (`*`) pour ne laisser aucun résidu dans votre dépôt Git cible :
 
 ```json
 {
