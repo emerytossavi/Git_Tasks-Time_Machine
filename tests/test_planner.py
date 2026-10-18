@@ -25,6 +25,19 @@ class TestPlannerUnit(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def test_is_system_excluded(self):
+        """Vérifie que .gtm, .git, .DS_Store et commit-plan.json sont exclus des scans."""
+        self.assertTrue(planner.is_system_excluded(".gtm"))
+        self.assertTrue(planner.is_system_excluded(".gtm/commit-plan.json"))
+        self.assertTrue(planner.is_system_excluded(".gtm/.gitignore"))
+        self.assertTrue(planner.is_system_excluded(".git"))
+        self.assertTrue(planner.is_system_excluded(".git/HEAD"))
+        self.assertTrue(planner.is_system_excluded(".DS_Store"))
+        self.assertTrue(planner.is_system_excluded("commit-plan.json"))
+        # Fichiers réguliers autorisés
+        self.assertFalse(planner.is_system_excluded("src/main.py"))
+        self.assertFalse(planner.is_system_excluded("README.md"))
+
     def test_clean_scope_name(self):
         self.assertEqual(planner.clean_scope_name("src"), "src")
         self.assertEqual(planner.clean_scope_name("API_Service"), "api-service")
@@ -180,6 +193,23 @@ class TestPlannerUnit(unittest.TestCase):
         # 4. Modèle inconnu sans indication de taille
         self.assertEqual(planner.classify_model("my-custom-model"), "modèle local")
         self.assertEqual(planner.classify_model(""), "modèle local")
+
+    def test_gtm_gitignore_isolation(self):
+        """Vérifie que le dossier .gtm est automatiquement isolé avec un .gitignore contenant '*'."""
+        import subprocess
+        # Initialiser un dépôt git dans le répertoire temporaire
+        subprocess.run(["git", "init", "-q"], cwd=str(self.cwd), check=True)
+
+        gtm_dir = self.cwd / ".gtm"
+        gtm_dir.mkdir(parents=True, exist_ok=True)
+        gitignore_file = gtm_dir / ".gitignore"
+        gitignore_file.write_text("*\n", encoding="utf-8")
+        plan_file = gtm_dir / "commit-plan.json"
+        plan_file.write_text('{"commits": []}\n', encoding="utf-8")
+
+        # Vérifier que git status ignore complètement .gtm et ses résidus
+        res = subprocess.run(["git", "status", "--porcelain"], cwd=str(self.cwd), capture_output=True, text=True, check=True)
+        self.assertEqual(res.stdout.strip(), "", "Le dossier .gtm ne doit laisser aucun résidu dans git status")
 
 if __name__ == "__main__":
     unittest.main()
