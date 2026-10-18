@@ -77,6 +77,12 @@ assert_exit_code "gtm model --list termine avec 0" 0 ./gtm.sh model --list
 # 5. gtm model sans argument avec nom vide échoue
 assert_exit_code "gtm model avec argument vide" 1 ./gtm.sh model ""
 
+# 6. Test OLLAMA_HOST configuration & persistance
+config_set_ollama_host "192.168.1.80:11435/"
+assert_equals "OLLAMA_HOST normalisé et exporté" "http://192.168.1.80:11435" "$OLLAMA_HOST"
+val_host=$(grep "^OLLAMA_HOST=" config.env | cut -d'=' -f2 | tr -d '"')
+assert_equals "OLLAMA_HOST persisté dans config.env" "http://192.168.1.80:11435" "$val_host"
+
 echo
 if (( FAILED > 0 )); then
     printf "\033[0;31mÉchec : %d test(s) échoué(s) sur %d.\033[0m\n" "$FAILED" "$((PASSED + FAILED))"

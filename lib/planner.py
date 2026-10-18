@@ -482,8 +482,9 @@ def resolve_links(file_analyses):
         fa["links_to"] = list(linked)
         del fa["imports"]
 
-def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url="http://localhost:11434"):
+def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url=None):
     """Appelle Ollama avec sortie JSON contrainte et dimensionnement adapté."""
+    base_url = (base_url or get_configured_ollama_host()).rstrip("/")
     url = f"{base_url}/api/chat"
 
     id_key = "module_ids" if is_modular else "file_ids"
@@ -942,14 +943,100 @@ def get_configured_default_model() -> str:
 
     return "qwen2.5-coder:1.5b"
 
+def get_configured_ollama_host() -> str:
+    """Récupère l'hôte Ollama configuré dans l'environnement (OLLAMA_HOST, OLLAMA_BASE_URL) ou dans config.env."""
+    env_host = os.environ.get("OLLAMA_HOST", "").strip() or os.environ.get("OLLAMA_BASE_URL", "").strip()
+    if env_host:
+        host = env_host
+    else:
+        host = "http://localhost:11434"
+        config_path = Path(__file__).resolve().parent.parent / "config.env"
+        if config_path.is_file():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("OLLAMA_HOST=") or line.startswith("OLLAMA_BASE_URL="):
+                            val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            if val:
+                                host = val
+                                break
+            except Exception:
+                pass
+
+    if not host.startswith("http://") and not host.startswith("https://"):
+        host = f"http://{host}"
+    return host.rstrip("/")
+
+def classify_model(model_name: str, param_size: str = "") -> str:
+    """
+    Qualifie honnêtement le modèle selon la taille réelle de ses paramètres :
+    - <= 3.5B : "SLM sobre"
+    - 4B à 14B : "LLM local"
+    - > 14B : "LLM haute capacité"
+    - Inconnu : "modèle local"
+    """
+    if not model_name and not param_size:
+        return "modèle local"
+
+    size_billions = None
+
+    # 1. Vérification via la chaîne de taille passée (ex: '1.5B', '7.6B', '500M')
+    if param_size:
+        m_size = re.search(r'([0-9]+(?:\.[0-9]+)?)\s*([bBmM])', param_size)
+        if m_size:
+            val = float(m_size.group(1))
+            unit = m_size.group(2).upper()
+            size_billions = val if unit == 'B' else (val / 1000.0)
+
+    # 2. Si non trouvée, extraction depuis le tag du modèle (ex: 'qwen2.5-coder:1.5b', 'llama3.1:8b', 'smollm:360m')
+    if size_billions is None and model_name:
+        m_tag = re.search(r'[:_\-]([0-9]+(?:\.[0-9]+)?)([bBmM])\b', model_name)
+        if m_tag:
+            val = float(m_tag.group(1))
+            unit = m_tag.group(2).upper()
+            size_billions = val if unit == 'B' else (val / 1000.0)
+
+    # 3. Qualification selon les seuils objectifs
+    if size_billions is None:
+        return "modèle local"
+
+    if size_billions <= 3.5:
+        return "SLM sobre"
+    elif size_billions <= 14.5:
+        return "LLM local"
+    else:
+        return "LLM haute capacité"
+
+def get_model_qualification(model_name: str, base_url=None) -> str:
+    """Interroge Ollama pour récupérer la taille exacte, ou analyse le nom du modèle."""
+    base_url = (base_url or get_configured_ollama_host()).rstrip("/")
+    param_size = ""
+    try:
+        req = urllib.request.Request(f"{base_url}/api/tags", headers={"User-Agent": "gtm"})
+        with urllib.request.urlopen(req, timeout=0.8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for m in data.get("models", []):
+                name = m.get("name", "")
+                if name == model_name or name.startswith(model_name + ":") or model_name.startswith(name):
+                    param_size = m.get("details", {}).get("parameter_size", "")
+                    if param_size:
+                        break
+    except Exception:
+        pass
+
+    return classify_model(model_name, param_size=param_size)
+
 def main():
     import argparse
     default_model = get_configured_default_model()
+    default_host = get_configured_ollama_host()
     parser = argparse.ArgumentParser(description=f"Générateur sobre de commit-plan.json via SLM local (défaut: {default_model}).")
     parser.add_argument("plan_file", nargs="?", default="commit-plan.json", help="Fichier de sortie (défaut: commit-plan.json)")
     parser.add_argument("-o", "--output", default=None, help="Chemin alternatif du fichier de sortie")
     parser.add_argument("-a", "--all", action="store_true", help="Analyser tous les fichiers du dossier (pas uniquement git status)")
     parser.add_argument("-m", "--model", default=default_model, help=f"Modèle Ollama (défaut configuré: {default_model})")
+    parser.add_argument("--ollama-host", default=default_host, help=f"Hôte du serveur Ollama (défaut: {default_host})")
     parser.add_argument("--start-date", default=None, help="Date de départ ISO (ex: 2026-10-10T09:00:00)")
     parser.add_argument("--date-strategy", choices=["last", "first"], default="last", help="Dater selon le 'last' (dernier fichier modifié, défaut) ou 'first' (premier)")
     parser.add_argument("--dry-run", action="store_true", help="Afficher le plan généré sans modifier de fichier")
@@ -1016,8 +1103,9 @@ def main():
             prompt_lines.append(desc)
 
     prompt = "\n".join(prompt_lines)
-    print(f"\033[0;34m[INFO]\033[0m Inférence via SLM sobre '{args.model}' (mode: {'modulaire' if is_modular else 'fichiers'})...")
-    res = call_ollama(prompt, is_modular=is_modular, model=args.model)
+    model_kind = get_model_qualification(args.model, base_url=args.ollama_host)
+    print(f"\033[0;34m[INFO]\033[0m Inférence via {model_kind} '{args.model}' (mode: {'modulaire' if is_modular else 'fichiers'})...")
+    res = call_ollama(prompt, is_modular=is_modular, model=args.model, base_url=args.ollama_host)
 
     raw_commits = res.get("commits", [])
     if not raw_commits:
