@@ -187,7 +187,7 @@ def clean_scope_name(raw_name: str) -> str:
         return "-".join(parts[:2])
     return name or "core"
 
-def extract_file_intent(cwd: Path, rel_path: str):
+def extract_file_intent(cwd: Path, rel_path: str, target_lang: str = "en"):
     """
     Extrait l'intention métier et technique réelle du fichier.
     Retourne un tuple: (summary, details)
@@ -198,15 +198,29 @@ def extract_file_intent(cwd: Path, rel_path: str):
     name_lower = full_path.name.lower()
     ext_lower = full_path.suffix.lower()
     rel_lower = rel_path.lower()
+    is_fr = (target_lang or "").lower().startswith("fr")
+    is_es = (target_lang or "").lower().startswith("es")
 
     # 1. Fichiers binaires & archives d'exemple
     if ext_lower in BINARY_EXTENSIONS or ext_lower in (".zip", ".tar", ".gz", ".7z", ".pdf", ".png", ".jpg", ".jpeg", ".ico", ".svg"):
         stem_clean = full_path.stem.replace("_", " ").replace("-", " ")
         if ext_lower == ".pdf":
+            if is_fr:
+                return f"document justificatif ({stem_clean})", f"pièce jointe document PDF : {stem_clean}"
+            elif is_es:
+                return f"documento justificativo ({stem_clean})", f"adjunto documento PDF: {stem_clean}"
             return f"sample supporting document ({stem_clean})", f"PDF document attachment: {stem_clean}"
         elif ext_lower in (".zip", ".tar", ".gz", ".7z"):
+            if is_fr:
+                return "archive d'exemples et pièces jointes", "archive de fichiers compressés ZIP"
+            elif is_es:
+                return "archivo de ejemplos y adjuntos", "archivo de archivos comprimidos ZIP"
             return "sample archive package containing xmldb.xml and attachments", "compressed ZIP package archive"
         else:
+            if is_fr:
+                return f"ressource graphique ({stem_clean})", f"élément image : {stem_clean}"
+            elif is_es:
+                return f"recurso gráfico ({stem_clean})", f"elemento de imagen: {stem_clean}"
             return f"graphical asset ({stem_clean})", f"image asset: {stem_clean}"
 
     # 2. Si le fichier est suivi et modifié, extraire du git diff
@@ -227,34 +241,81 @@ def extract_file_intent(cwd: Path, rel_path: str):
                     if m and m.group(1) not in symbols_added:
                         symbols_added.append(m.group(1))
                 if symbols_added:
-                    summary = f"update {', '.join(symbols_added[:3])} logic"
-                    details = f"update logic for {', '.join(symbols_added[:5])}"
+                    if is_fr:
+                        summary = f"mettre à jour la logique de {', '.join(symbols_added[:3])}"
+                        details = f"mise à jour de la logique pour {', '.join(symbols_added[:5])}"
+                    elif is_es:
+                        summary = f"actualizar la lógica de {', '.join(symbols_added[:3])}"
+                        details = f"actualización de lógica para {', '.join(symbols_added[:5])}"
+                    else:
+                        summary = f"update {', '.join(symbols_added[:3])} logic"
+                        details = f"update logic for {', '.join(symbols_added[:5])}"
                 else:
                     meaningful = [l for l in added if any(l.startswith(x) for x in ("#", "//", "/*", "*", "def ", "class ", "function ", "export ", "public ", "const ", "router.", "app."))]
                     diff_summary = meaningful if meaningful else added
                     clean_diff = [re.sub(r'^[#/\*\s]+', '', x).strip() for x in diff_summary if x.strip()]
-                    summary = f"update {Path(rel_path).stem} implementation"
-                    details = "diff changes: " + " ; ".join(clean_diff[:4])
+                    stem_name = Path(rel_path).stem
+                    if is_fr:
+                        summary = f"mettre à jour {stem_name}"
+                        details = "modifications apportées : " + " ; ".join(clean_diff[:4])
+                    elif is_es:
+                        summary = f"actualizar {stem_name}"
+                        details = "cambios realizados: " + " ; ".join(clean_diff[:4])
+                    else:
+                        summary = f"update {stem_name} implementation"
+                        details = "diff changes: " + " ; ".join(clean_diff[:4])
                 return summary[:120], details[:200]
     except Exception:
         pass
 
     # 3. Fichiers de configuration / containerisation / docs clés
     if name_lower == ".dockerignore":
+        if is_fr:
+            return "définir les exclusions de contexte pour l'image conteneur", "exclusions de build pour le packaging conteneur"
+        elif is_es:
+            return "definir exclusiones de contexto para la imagen de contenedor", "exclusiones de compilación para contenedor"
         return "define build context exclusions for container packaging", "container packaging build context exclusions"
     elif "entrypoint" in name_lower or (ext_lower in (".sh", ".bash") and "docker" in rel_lower):
+        if is_fr:
+            return "gérer le démarrage et l'initialisation du runtime conteneur", "initialisation et point d'entrée du conteneur"
+        elif is_es:
+            return "gestionar inicio e inicialización del entorno de contenedor", "inicialización y punto de entrada de contenedor"
         return "manage container runtime startup and initialization", "container runtime entrypoint initialization"
     elif name_lower.startswith("dockerfile"):
+        if is_fr:
+            return "configurer l'environnement de build et l'image conteneur", "environnement de compilation conteneur Docker"
+        elif is_es:
+            return "configurar entorno de compilación e imagen de contenedor", "entorno de compilación multi-etapa Docker"
         return "configure container build environment and runtime image", "multi-stage Docker build environment"
     elif name_lower.startswith("docker-compose"):
+        if is_fr:
+            return "orchestrer les services multi-conteneurs et l'environnement réseau", "configuration des services multi-conteneurs"
+        elif is_es:
+            return "orquestar servicios multi-contenedor y entorno de red", "configuración de servicios multi-contenedor"
         return "orchestrate multi-container services and network environment", "multi-container services configuration"
     elif name_lower == ".gitignore":
+        if is_fr:
+            return "configurer les règles d'exclusion de fichiers pour git", "règles d'exclusion et de masquage git"
+        elif is_es:
+            return "configurar reglas de exclusión de archivos para git", "reglas de exclusión e ignorado git"
         return "configure repository ignore rules for untracked files", "git exclusions and ignore rules"
     elif name_lower in ("readme.md", "readme"):
+        if is_fr:
+            return "documenter l'architecture du projet, l'API et les guides d'utilisation", "vue d'ensemble, architecture et documentation d'utilisation"
+        elif is_es:
+            return "documentar arquitectura del proyecto, API y guías de uso", "visión general, arquitectura y directrices de uso"
         return "document project architecture, API structure and usage guides", "project overview, architecture and usage guidelines"
     elif name_lower in ("license", "license.md"):
+        if is_fr:
+            return "définir les termes de licence et conditions de distribution", "termes de licence logicielle"
+        elif is_es:
+            return "definir términos de licencia y condiciones de distribución", "términos de licencia de software"
         return "define software license terms and distribution conditions", "software licensing terms"
     elif "guide" in name_lower:
+        if is_fr:
+            return "fournir le guide de référence technique et spécifications", "guide de référence technique et spécifications"
+        elif is_es:
+            return "proporcionar guía de referencia técnica y especificaciones", "guía de referencia técnica y especificaciones"
         return "provide technical webservices reference guide and specifications", "technical reference guide and specifications"
 
     # Lecture du contenu
@@ -379,19 +440,38 @@ def extract_file_intent(cwd: Path, rel_path: str):
             docstrings.append(comment_lines[0])
 
     if routes:
-        summary = f"implement API endpoints ({', '.join(routes[:3])})"
-        details = f"routes: {', '.join(routes[:4])}, handlers: {', '.join(symbols[:3])}"
+        if is_fr:
+            summary = f"implémenter les points d'accès API ({', '.join(routes[:3])})"
+            details = f"routes : {', '.join(routes[:4])}, gestionnaires : {', '.join(symbols[:3])}"
+        elif is_es:
+            summary = f"implementar endpoints de API ({', '.join(routes[:3])})"
+            details = f"rutas: {', '.join(routes[:4])}, controladores: {', '.join(symbols[:3])}"
+        else:
+            summary = f"implement API endpoints ({', '.join(routes[:3])})"
+            details = f"routes: {', '.join(routes[:4])}, handlers: {', '.join(symbols[:3])}"
         return summary, details
     elif docstrings and len(docstrings[0]) > 15:
         summary = docstrings[0][:100]
-        details = f"{docstrings[0]} (implements {', '.join(symbols[:4])})" if symbols else docstrings[0]
+        label_imp = "implémente" if is_fr else ("implementa" if is_es else "implements")
+        details = f"{docstrings[0]} ({label_imp} {', '.join(symbols[:4])})" if symbols else docstrings[0]
         return summary, details
     elif symbols:
-        summary = f"implement {', '.join(symbols[:3])}"
-        details = f"implements {', '.join(symbols[:5])}"
+        if is_fr:
+            summary = f"implémenter {', '.join(symbols[:3])}"
+            details = f"implémente {', '.join(symbols[:5])}"
+        elif is_es:
+            summary = f"implementar {', '.join(symbols[:3])}"
+            details = f"implementa {', '.join(symbols[:5])}"
+        else:
+            summary = f"implement {', '.join(symbols[:3])}"
+            details = f"implements {', '.join(symbols[:5])}"
         return summary, details
 
     stem_clean = full_path.stem.replace("_", " ").replace("-", " ")
+    if is_fr:
+        return f"implémenter les fonctionnalités de {stem_clean}", f"logique et configuration pour {stem_clean}"
+    elif is_es:
+        return f"implementar las funcionalidades de {stem_clean}", f"lógica y configuración para {stem_clean}"
     return f"implement {stem_clean} functionality", f"logic and configuration for {stem_clean}"
 
 def categorize_file(rel_path: str):
@@ -407,10 +487,10 @@ def categorize_file(rel_path: str):
         return {"type": "ci", "scope": "ci", "category": "ci"}
     if name in ["package.json", "package-lock.json", "pom.xml", "build.gradle", "cargo.toml", "requirements.txt", "pyproject.toml", "setup.py", "makefile"]:
         return {"type": "build", "scope": "deps", "category": "deps"}
-    if "test" in rel_lower or "spec" in rel_lower:
-        return {"type": "test", "scope": "test", "category": "test"}
     if name in ["readme.md", "license", "contributing.md", "changelog.md"] or ext in [".md", ".txt"] or rel_lower.startswith("docs/"):
         return {"type": "docs", "scope": "docs", "category": "docs"}
+    if "test" in rel_lower or "spec" in rel_lower:
+        return {"type": "test", "scope": "test", "category": "test"}
     if "environment" in rel_lower or name.startswith(".env"):
         return {"type": "chore", "scope": "env", "category": "env"}
     if "template" in rel_lower or "sample" in rel_lower:
@@ -428,7 +508,7 @@ def categorize_file(rel_path: str):
         scope = clean_scope_name(p.stem)
     return {"type": "feat", "scope": scope, "category": scope}
 
-def analyze_file(cwd: Path, rel_path: str):
+def analyze_file(cwd: Path, rel_path: str, target_lang: str = "en"):
     """Analyse légère: extrait les imports, définitions clés, rôle et intention sémantique profonde."""
     full_path = cwd / rel_path
     cat = categorize_file(rel_path)
@@ -453,7 +533,7 @@ def analyze_file(cwd: Path, rel_path: str):
         except Exception:
             pass
 
-    summary, details = extract_file_intent(cwd, rel_path)
+    summary, details = extract_file_intent(cwd, rel_path, target_lang=target_lang)
 
     return {
         "path": rel_path,
@@ -483,55 +563,155 @@ def resolve_links(file_analyses):
         fa["links_to"] = list(linked)
         del fa["imports"]
 
-def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url=None):
-    """Appelle Ollama avec sortie JSON contrainte et dimensionnement adapté."""
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic"
+}
+
+def get_language_name(lang_code: str) -> str:
+    code = (lang_code or "en").strip().lower()
+    return SUPPORTED_LANGUAGES.get(code, code)
+
+def get_configured_default_lang() -> str:
+    """Récupère la langue configurée dans l'environnement (DEFAULT_LANG) ou dans config.env (défaut: 'en')."""
+    env_lang = os.environ.get("DEFAULT_LANG", "").strip().lower()
+    if env_lang:
+        return env_lang
+
+    config_path = Path(__file__).resolve().parent.parent / "config.env"
+    if config_path.is_file():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("DEFAULT_LANG="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+                        if val:
+                            return val
+        except Exception:
+            pass
+
+    return "en"
+
+def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url=None, target_lang="en"):
+    """Appelle Ollama avec sortie JSON contrainte, types standards et langue configurée."""
     base_url = (base_url or get_configured_ollama_host()).rstrip("/")
     url = f"{base_url}/api/chat"
 
     id_key = "module_ids" if is_modular else "file_ids"
     example_id = "[1, 2]" if is_modular else "[1, 2]"
+    lang_name = get_language_name(target_lang)
+    is_fr = (target_lang or "").lower().startswith("fr")
+    is_es = (target_lang or "").lower().startswith("es")
 
-    system_prompt = (
-        "You are an expert Git commit architect adhering strictly to Conventional Commits v1.0.0 and @commitlint/config-conventional rules.\n"
-        "Your task is to organize the numbered items into logical, atomic commits using their integer IDs in '" + id_key + "'.\n\n"
-        "CRITICAL CONVENTIONAL COMMITS & COMMITLINT SPECIFICATIONS:\n"
-        "1. Every ID from 1 to N MUST be included in exactly one commit in '" + id_key + "'.\n"
-        "2. ALLOWED TYPES (type-enum):\n"
-        "   - 'feat': user-facing new feature or capability\n"
-        "   - 'fix': bug fix or corrective behavior\n"
-        "   - 'build': changes affecting build system, packaging, external dependencies, or containerization (Docker, npm, maven)\n"
-        "   - 'ci': changes to CI/CD workflows and scripts (GitHub Actions, pipelines)\n"
-        "   - 'docs': documentation only (README, API docs, licenses)\n"
-        "   - 'refactor': code change that neither fixes a bug nor adds a feature\n"
-        "   - 'test': adding or updating test suites\n"
-        "   - 'chore': maintenance, tooling, configuration files\n"
-        "3. SCOPES (scope-case):\n"
-        "   - MUST be in lower-case (e.g. docker, auth, api, cli, config, env, templates, formalites, registre).\n"
-        "   - FORBIDDEN SCOPES: NEVER use 'code', 'file', 'files', 'all', or empty/generic scopes.\n"
-        "4. ATOMIC COHERENCE:\n"
-        "   - Group all related files that form a single logical unit of work into ONE commit.\n"
-        "5. SUBJECT LINE RULES (subject-case, subject-full-stop, imperative-mood):\n"
-        "   - Format: '<type>(<scope>): <subject>'\n"
-        "   - MUST start with a LOWER-CASE imperative verb: add, configure, setup, implement, update, remove, fix, integrate, support, document.\n"
-        "   - MUST NOT end with a period ('.').\n"
-        "   - STRICTLY FORBIDDEN: NEVER write 'add <filename>' or repeat file paths/extensions.\n"
-        "   - STRICTLY FORBIDDEN: DO NOT put raw HTTP methods (GET, POST) or raw URLs in the subject line.\n"
-        "     * INCORRECT: 'feat(formalites): POST /webServTiers/save'\n"
-        "     * CORRECT: 'feat(formalites): implement writing formalities and registration requests'\n"
-        "     * CORRECT: 'build(docker): configure multi-stage container build and startup entrypoint'\n"
-        "6. MANDATORY DESCRIPTION / BODY:\n"
-        "   - The 'body' field is MANDATORY. State clearly WHAT was done technically: which endpoints were added, which business models or schemas were implemented, and what parameters were configured.\n"
-        "7. Output strictly a JSON object matching this schema:\n"
-        "{\n"
-        '  "commits": [\n'
-        '    {\n'
-        '      "subject": "<type>(<scope>): <concise imperative summary without file names>",\n'
-        '      "body": "<concrete description of technical actions, endpoints, or data structures>",\n'
-        '      "' + id_key + '": ' + example_id + '\n'
-        '    }\n'
-        '  ]\n'
-        "}"
-    )
+    if is_fr:
+        system_prompt = (
+            "Tu es un architecte expert en commits Git respectant strictement Conventional Commits v1.0.0 et @commitlint/config-conventional.\n"
+            f"Ta mission est d'organiser les éléments numérotés en commits atomiques et logiques en utilisant leurs identifiants entiers dans '{id_key}'.\n\n"
+            "RÈGLES CRITIQUES CONVENTIONAL COMMITS & LANGUE :\n"
+            f"1. Chaque identifiant de 1 à N doit obligatoirement figurer dans exactement un commit dans '{id_key}'.\n"
+            "2. MOTS-CLÉS DE TYPE (type-enum) : restent OBLIGATOIREMENT en anglais standard minuscules selon la norme universelle :\n"
+            "   'feat', 'fix', 'build', 'ci', 'docs', 'refactor', 'test', 'chore', 'perf', 'style', 'revert'.\n"
+            "   NE JAMAIS traduire le mot-clé de type lui-même (ex: NE PAS écrire 'fonctionnalité' ou 'correction').\n"
+            "3. LANGUE STRICTE DU MESSAGE : Le résumé (subject) et la description (body) doivent être rédigés STRICTEMENT EN FRANÇAIS.\n"
+            "   AUCUN mélange linguistique (aucun mot ou phrase en anglais dans le sujet/corps sauf noms propres/fichiers). Rédige des phrases claires et naturelles en français.\n"
+            "4. SCOPE (scope-case) : En minuscules (ex: docker, auth, api, cli, config, env, templates).\n"
+            "   TAUTOLOGIE STRICTEMENT INTERDITE : Ne JAMAIS répéter le nom du type dans le scope (ex: INTERDIT 'test(test):', 'docs(docs):', 'chore(chore):'). Omettre le scope ou utiliser le nom du module.\n"
+            "5. COHÉRENCE ATOMIQUE : Regroupe les fichiers complémentaires d'une même fonctionnalité dans un commit unique.\n"
+            "6. RÈGLES DE L'EN-TÊTE : Format '<type>(<scope>): <sujet>'\n"
+            "   - Doit impérativement commencer par un verbe impératif en minuscules en français (ex: ajouter, configurer, implémenter, mettre à jour, supprimer, corriger, documenter).\n"
+            "   - Ne doit PAS se terminer par un point.\n"
+            "   - STRICTEMENT INTERDIT : Ne JAMAIS écrire 'ajouter <nom_fichier>' ni répéter les extensions de fichier.\n"
+            "   - STRICTEMENT INTERDIT : Ne JAMAIS inclure de numérotations brutes de sections markdown (ex: 'ajouter 1. L\'Essence...' -> écrire 'documenter la vision et les objectifs du projet').\n"
+            "   - STRICTEMENT INTERDIT : Pas de méthodes HTTP brutes (GET, POST) ou d'URL brutes dans l'en-tête.\n"
+            "7. CORPS (body) : OBLIGATOIRE. Expliquer concrètement et techniquement en français ce qui a été réalisé sans répéter bêtement la liste des fichiers.\n"
+            "8. Sortie JSON stricte au format suivant :\n"
+            "{\n"
+            '  "commits": [\n'
+            '    {\n'
+            '      "subject": "<type>(<scope>): <résumé impératif en français>",\n'
+            '      "body": "<description technique détaillée en français>",\n'
+            f'      "{id_key}": {example_id}\n'
+            '    }\n'
+            '  ]\n'
+            "}"
+        )
+    elif is_es:
+        system_prompt = (
+            "Eres un arquitecto experto en commits de Git que cumple estrictamente con las reglas de Conventional Commits v1.0.0.\n"
+            f"Tu tarea es organizar los elementos numerados en commits atómicos y lógicos usando sus identificadores enteros en '{id_key}'.\n\n"
+            "REGLAS CRÍTICAS:\n"
+            f"1. Cada identificador de 1 a N debe incluirse exactamente en un commit en '{id_key}'.\n"
+            "2. PALABRAS CLAVE DE TIPO : Deben permanecer OBLIGATORIAMENTE en inglés en minúsculas (feat, fix, docs, chore, test, refactor, build, ci).\n"
+            "3. IDIOMA DEL MENSAJE : El resumen (subject) y la descripción (body) deben redactarse ESTRICTAMENTE EN ESPAÑOL imperativo.\n"
+            "   SIN mezcla de idiomas (no spanglish). Redacta frases claras y naturales en español.\n"
+            "4. SCOPE : En minúsculas. NUNCA repetir el tipo en el scope (prohibido 'test(test):', 'docs(docs):').\n"
+            "5. COHERENCIA ATÓMICA : Agrupa los archivos complementarios de una misma función en un único commit.\n"
+            "6. FORMATO DEL ENCABEZADO : '<type>(<scope>): <resumen en español>'\n"
+            "   - Debe comenzar con un verbo imperativo en minúsculas en español (ej: agregar, configurar, implementar, actualizar, corregir, documentar).\n"
+            "   - No debe terminar con un punto.\n"
+            "   - NUNCA incluir números brutos de secciones de markdown ni nombres de archivos.\n"
+            "7. CUERPO (body) : OBLIGATORIO. Explicar en español técnicamente qué se implementó.\n"
+            "8. Salida JSON estricta:\n"
+            "{\n"
+            '  "commits": [\n'
+            '    {\n'
+            '      "subject": "<type>(<scope>): <resumen imperativo en español>",\n'
+            '      "body": "<descripción técnica en español>",\n'
+            f'      "{id_key}": {example_id}\n'
+            '    }\n'
+            '  ]\n'
+            "}"
+        )
+    else:
+        system_prompt = (
+            "You are an expert Git commit architect adhering strictly to Conventional Commits v1.0.0 and @commitlint/config-conventional rules.\n"
+            "Your task is to organize the numbered items into logical, atomic commits using their integer IDs in '" + id_key + "'.\n\n"
+            "CRITICAL CONVENTIONAL COMMITS & LINGUISTIC SPECIFICATIONS:\n"
+            "1. Every ID from 1 to N MUST be included in exactly one commit in '" + id_key + "'.\n"
+            "2. CONVENTIONAL TYPES (type-enum):\n"
+            "   - The type keyword MUST ALWAYS remain in lowercase English according to the Conventional Commits v1.0.0 standard:\n"
+            "     'feat', 'fix', 'build', 'ci', 'docs', 'refactor', 'test', 'chore', 'perf', 'style', 'revert'.\n"
+            "   - NEVER translate the type keyword itself (e.g. NEVER write 'fonctionnalité', 'correction', or 'documentation').\n"
+            "3. STRICT MONOLINGUAL TARGET LANGUAGE:\n"
+            f"   - The commit message content (the subject summary after '<type>(<scope>): ' and the 'body' description) MUST be strictly written in {lang_name} ({target_lang}).\n"
+            f"   - NEVER mix languages. If any file title, heading, docstring, or comment in the input is in another language, you MUST translate and synthesize it into {lang_name}.\n"
+            "4. SCOPES (scope-case):\n"
+            "   - MUST be in lower-case (e.g. docker, auth, api, cli, config, env, templates).\n"
+            "   - FORBIDDEN SCOPES: NEVER use 'code', 'file', 'files', 'all', or empty/generic scopes.\n"
+            "   - FORBIDDEN TAUTOLOGY: NEVER repeat the type name as the scope (e.g. NEVER write 'test(test):', 'docs(docs):', or 'chore(chore):'). Use the specific module name or omit the scope entirely.\n"
+            "5. ATOMIC COHERENCE:\n"
+            "   - Group all related files that form a single logical unit of work into ONE commit.\n"
+            "6. SUBJECT LINE RULES (subject-case, subject-full-stop, imperative-mood):\n"
+            "   - Format: '<type>(<scope>): <subject>'\n"
+            f"   - MUST start with a LOWER-CASE imperative verb in {lang_name} (e.g. in English: add, configure, setup, implement, update, remove, fix, integrate, support, document).\n"
+            "   - MUST NOT end with a period ('.').\n"
+            "   - STRICTLY FORBIDDEN: NEVER write 'add <filename>' or repeat file paths/extensions.\n"
+            "   - STRICTLY FORBIDDEN: NEVER include raw markdown section numbers in the subject (e.g. NEVER write 'add 1. L\'Essence...' -> write 'document core project vision and goals').\n"
+            "   - STRICTLY FORBIDDEN: DO NOT put raw HTTP methods (GET, POST) or raw URLs in the subject line.\n"
+            "7. MANDATORY DESCRIPTION / BODY:\n"
+            f"   - The 'body' field is MANDATORY. State clearly and concisely in {lang_name} WHAT was done technically without verbatim repetitions of the file list.\n"
+            "8. Output strictly a JSON object matching this schema:\n"
+            "{\n"
+            '  "commits": [\n'
+            '    {\n'
+            '      "subject": "<type>(<scope>): <concise imperative summary in ' + lang_name + '>",\n'
+            '      "body": "<concrete technical description in ' + lang_name + '>",\n'
+            '      "' + id_key + '": ' + example_id + '\n'
+            '    }\n'
+            '  ]\n'
+            "}"
+        )
 
     payload = {
         "model": model,
@@ -678,15 +858,15 @@ def format_file_label(rel_path: str, all_commit_files: list) -> str:
         return f"{p.parts[-2]}/{p.name}"
     return p.name
 
-def sanitize_commit_header(subject: str, commit_files: list = None) -> str:
+def sanitize_commit_header(subject: str, commit_files: list = None, target_lang: str = "en") -> str:
     """
     Nettoie et normalise la première ligne de commit selon @commitlint/config-conventional:
-    - type-enum : validation parmi les types officiels
-    - scope-case : minuscules, suppression des extensions et scopes interdits
+    - type-enum : validation parmi les types officiels (en anglais)
+    - scope-case : minuscules, suppression des extensions, scopes interdits et scopes tautologiques (ex: test(test))
     - subject-case : première lettre en minuscule
     - subject-full-stop : suppression de tout point final
     - élimination des méthodes HTTP (POST, GET) ou URL brutes dans l'en-tête
-    - élimination de l'anti-pattern 'add <fichier>'
+    - élimination de l'anti-pattern 'add <fichier>' et des numérotations brutes de sections
     """
     subject = subject.strip()
     m = re.match(r'^([a-zA-Z]+)(?:\(([^)]+)\))?\s*:\s*(.*)', subject)
@@ -729,14 +909,14 @@ def sanitize_commit_header(subject: str, commit_files: list = None) -> str:
         elif all_credit:
             type_part, scope_part = "feat", "credit-mobilier"
         elif all_tests:
-            type_part, scope_part = "test", "test"
+            type_part, scope_part = "test", (scope_part if scope_part and scope_part != "test" else "")
         elif all_ci:
-            type_part, scope_part = "ci", "ci"
+            type_part, scope_part = "ci", (scope_part if scope_part and scope_part != "ci" else "")
 
-    # Nettoyage du scope
+    # Nettoyage du scope (élimination des scopes génériques ou tautologiques ex: test(test))
     if scope_part:
         scope_part = clean_scope_name(scope_part)
-        if scope_part in ("code", "file", "files", "all", "project", "repo", "misc"):
+        if scope_part in ("code", "file", "files", "all", "project", "repo", "misc") or scope_part == type_part:
             scope_part = ""
 
     # Nettoyage signatures / update / colonnes
@@ -745,6 +925,10 @@ def sanitize_commit_header(subject: str, commit_files: list = None) -> str:
     rest = rest.rstrip(".:,;")
     if " | " in rest:
         rest = rest.split(" | ")[0].strip()
+
+    # Nettoyage des numérotations brutes de sections markdown (ex: 'add 1. L\'Essence...' -> 'add L\'Essence...')
+    rest = re.sub(r'^(?:add|ajouter|update|mettre à jour)\s+[0-9]+[\.\-\)]\s*', 'add ', rest, flags=re.I)
+    rest = re.sub(r'^[0-9]+[\.\-\)]\s*', '', rest)
 
     # Nettoyage des méthodes HTTP ou URL dans l'en-tête (doivent aller dans la description/body)
     if re.search(r'\b(?:GET|POST|PUT|DELETE|PATCH)\b', rest, re.I):
@@ -781,33 +965,40 @@ def sanitize_commit_header(subject: str, commit_files: list = None) -> str:
         rest = rest[0].lower() + rest[1:]
 
     # S'assurer d'avoir un verbe impératif
-    valid_verbs = r'^(?:add|configure|setup|implement|update|remove|fix|refactor|create|define|integrate|orchestrate|support|document|provide|clean|cleanup)\b'
-    if not re.match(valid_verbs, rest, re.IGNORECASE):
-        rest = f"add {rest}"
+    valid_verbs_en = r'^(?:add|configure|setup|implement|update|remove|fix|refactor|create|define|integrate|orchestrate|support|document|provide|clean|cleanup)\b'
+    valid_verbs_fr = r'^(?:ajouter|configurer|implémenter|mettre à jour|corriger|supprimer|refactoriser|créer|définir|intégrer|orchestrer|supporter|documenter|fournir|nettoyer|tester)\b'
+    is_fr = (target_lang or "").lower().startswith("fr")
+
+    if is_fr:
+        if not re.match(valid_verbs_fr, rest, re.IGNORECASE) and not re.match(valid_verbs_en, rest, re.IGNORECASE):
+            rest = f"ajouter {rest}"
+    else:
+        if not re.match(valid_verbs_en, rest, re.IGNORECASE):
+            rest = f"add {rest}"
 
     # Correction de l'anti-pattern "add <filename>"
-    if commit_files and re.match(r'^(?:add|added|create|created)\s+[a-zA-Z0-9_\.\-]+(?:\.[a-zA-Z0-9]+)?$', rest.strip(), re.IGNORECASE):
+    if commit_files and re.match(r'^(?:add|added|create|created|ajouter|créer)\s+[a-zA-Z0-9_\.\-]+(?:\.[a-zA-Z0-9]+)?$', rest.strip(), re.IGNORECASE):
         if any("docker" in f.lower() for f in commit_files):
-            rest = "configure containerization and startup entrypoint"
+            rest = "configure containerization and startup entrypoint" if not is_fr else "configurer la conteneurisation et l'entrypoint"
             type_part, scope_part = "build", "docker"
         elif any(f.endswith(".gitignore") for f in commit_files):
-            rest = "configure repository ignore rules"
+            rest = "configure repository ignore rules" if not is_fr else "configurer les règles d'exclusion gitignore"
             type_part, scope_part = "chore", "git"
         elif any("readme" in f.lower() for f in commit_files):
-            rest = "add documentation and usage overview"
+            rest = "add documentation and usage overview" if not is_fr else "ajouter la documentation générale du projet"
             type_part, scope_part = "docs", "readme"
         elif any("test" in f.lower() for f in commit_files):
-            rest = "add automated test cases"
-            type_part, scope_part = "test", "test"
+            rest = "add automated test cases" if not is_fr else "ajouter des cas de test automatisés"
+            type_part, scope_part = "test", ""
         else:
-            rest = f"implement {scope_part or 'core'} functionality"
+            rest = f"implement {scope_part or 'core'} functionality" if not is_fr else f"implémenter les fonctionnalités {scope_part or 'principales'}"
 
     if scope_part:
         return f"{type_part}({scope_part}): {rest}"
     else:
         return f"{type_part}: {rest}"
 
-def sanitize_commit_message(msg: str, commit_files: list = None) -> str:
+def sanitize_commit_message(msg: str, commit_files: list = None, target_lang: str = "en") -> str:
     """Nettoie l'en-tête et préserve ou assemble le corps du message."""
     msg = msg.strip()
     if "\n\n" in msg:
@@ -822,12 +1013,12 @@ def sanitize_commit_message(msg: str, commit_files: list = None) -> str:
         subject = msg
         body = ""
 
-    header = sanitize_commit_header(subject, commit_files)
+    header = sanitize_commit_header(subject, commit_files, target_lang=target_lang)
     if body:
         return f"{header}\n\n{body}"
     return header
 
-def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: dict = None):
+def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: dict = None, target_lang: str = "en"):
     """
     Élimine les doublons, filtre les fichiers hors cible, réconcilie les orphelins
     et enrichit automatiquement le corps de commit avec les détails techniques réels.
@@ -835,6 +1026,7 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
     target_set = set(all_files)
     assigned_files = set()
     cleaned_commits = []
+    is_fr = (target_lang or "").lower().startswith("fr")
 
     for c in commits:
         filtered_files = []
@@ -856,7 +1048,7 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
             else:
                 subj, raw_body = c_msg.strip(), ""
 
-            header = sanitize_commit_header(subj, filtered_files)
+            header = sanitize_commit_header(subj, filtered_files, target_lang=target_lang)
 
             # Assemblage de la description technique concrète des fichiers
             bullets = []
@@ -880,10 +1072,11 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
                 elif bullets:
                     full_body = "\n".join(bullets)
                 else:
-                    full_body = raw_body or "Updates target project files and configurations."
+                    full_body = raw_body or ("Mise à jour des fichiers et configurations du projet." if is_fr else "Updates target project files and configurations.")
             else:
                 single_det = bullets[0].split(": ", 1)[-1] if bullets else ""
-                full_body = raw_body if is_body_valid else (single_det or "Updates configuration and resources.")
+                fallback_single = "Mise à jour des ressources et configurations." if is_fr else "Updates configuration and resources."
+                full_body = raw_body if is_body_valid else (single_det or fallback_single)
 
             c["message"] = f"{header}\n\n{full_body}"
             cleaned_commits.append(c)
@@ -903,8 +1096,9 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
                     docs_commit["message"] += "\n" + "\n".join(new_bullets)
             else:
                 orphan_bullets = [f"- {f}: {analyses_dict.get(f, {}).get('details', 'documentation')}" for f in docs_orphans] if analyses_dict else []
+                msg_docs = "docs(api): documenter le projet et les spécifications\n\n" if is_fr else "docs(api): add documentation and project references\n\n"
                 cleaned_commits.append({
-                    "message": "docs(api): add documentation and project references\n\n" + "\n".join(orphan_bullets),
+                    "message": msg_docs + "\n".join(orphan_bullets),
                     "files": docs_orphans
                 })
 
@@ -916,8 +1110,9 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
                     cleaned_commits[-1]["message"] += "\n" + "\n".join(new_bullets)
             else:
                 orphan_bullets = [f"- {f}: {analyses_dict.get(f, {}).get('details', 'implementation')}" for f in code_orphans] if analyses_dict else []
+                msg_code = "feat(core): implémenter les fonctionnalités principales du projet\n\n" if is_fr else "feat(core): implement core project functionality\n\n"
                 cleaned_commits.append({
-                    "message": "feat(core): implement core project functionality\n\n" + "\n".join(orphan_bullets),
+                    "message": msg_code + "\n".join(orphan_bullets),
                     "files": code_orphans
                 })
 
@@ -1032,11 +1227,13 @@ def main():
     import argparse
     default_model = get_configured_default_model()
     default_host = get_configured_ollama_host()
+    default_lang = get_configured_default_lang()
     parser = argparse.ArgumentParser(description=f"Générateur sobre de commit-plan.json via SLM local (défaut: {default_model}).")
     parser.add_argument("plan_file", nargs="?", default=".gtm/commit-plan.json", help="Fichier de sortie (défaut: .gtm/commit-plan.json)")
     parser.add_argument("-o", "--output", default=None, help="Chemin alternatif du fichier de sortie")
     parser.add_argument("-a", "--all", action="store_true", help="Analyser tous les fichiers du dossier (pas uniquement git status)")
     parser.add_argument("-m", "--model", default=default_model, help=f"Modèle Ollama (défaut configuré: {default_model})")
+    parser.add_argument("-l", "--lang", default=default_lang, help=f"Langue des messages de commit (défaut configuré: {default_lang})")
     parser.add_argument("--ollama-host", default=default_host, help=f"Hôte du serveur Ollama (défaut: {default_host})")
     parser.add_argument("--start-date", default=None, help="Date de départ ISO (ex: 2026-10-10T09:00:00)")
     parser.add_argument("--date-strategy", choices=["last", "first"], default="last", help="Dater selon le 'last' (dernier fichier modifié, défaut) ou 'first' (premier)")
@@ -1054,7 +1251,9 @@ def main():
         sys.exit(0)
 
     print(f"\033[0;34m[INFO]\033[0m {len(files)} fichier(s) détecté(s). Analyse des liaisons structurelles...")
-    analyses = [analyze_file(cwd, f) for f in files]
+    is_fr = (args.lang or "").lower().startswith("fr")
+    is_es = (args.lang or "").lower().startswith("es")
+    analyses = [analyze_file(cwd, f, target_lang=args.lang) for f in files]
     resolve_links(analyses)
 
     analyses_dict = {fa["path"]: fa for fa in analyses}
@@ -1076,7 +1275,13 @@ def main():
                 cat = analyses_dict.get(f, {}).get("category", "core")
                 groups[f"root/{cat}"].append(f)
 
-        prompt_lines = ["Modules to organize into logical, atomic Conventional Commits:"]
+        if is_fr:
+            prompt_lines = ["Modules à regrouper en commits Conventional Commits atomiques et logiques :"]
+        elif is_es:
+            prompt_lines = ["Módulos para organizar en commits Conventional Commits atómicos y lógicos:"]
+        else:
+            prompt_lines = ["Modules to organize into logical, atomic Conventional Commits:"]
+
         for idx, (dir_path, g_files) in enumerate(groups.items(), 1):
             id_map[idx] = g_files
             if dir_path.startswith("root/"):
@@ -1088,25 +1293,46 @@ def main():
             sample_types = [analyses_dict[gf]["type"] for gf in g_files if gf in analyses_dict]
             primary_type = sample_types[0] if sample_types else "feat"
             sample_intents = [analyses_dict[gf]["intent"] for gf in g_files if gf in analyses_dict]
-            clean_intents = [re.sub(r'^(?:update:\s*|changes:\s*|implements\s*)', '', s).strip() for s in sample_intents if s]
+            clean_intents = [re.sub(r'^(?:update:\s*|changes:\s*|implements\s*|mise à jour:\s*|modifications:\s*)', '', s, flags=re.I).strip() for s in sample_intents if s]
             
             # Résumé informatif multi-fichiers
             unique_intents = list(dict.fromkeys(clean_intents))[:3]
             summary = ", ".join(unique_intents)
-            prompt_lines.append(f"- Module [{idx}] '{scope_clean}' [type: {primary_type}]: {len(g_files)} file(s)\n  * Intent: {summary}")
+            if is_fr:
+                prompt_lines.append(f"- Module [{idx}] '{scope_clean}' [type: {primary_type}]: {len(g_files)} fichier(s)\n  * Rôle : {summary}")
+            elif is_es:
+                prompt_lines.append(f"- Módulo [{idx}] '{scope_clean}' [type: {primary_type}]: {len(g_files)} archivo(s)\n  * Rol: {summary}")
+            else:
+                prompt_lines.append(f"- Module [{idx}] '{scope_clean}' [type: {primary_type}]: {len(g_files)} file(s)\n  * Intent: {summary}")
     else:
-        prompt_lines = ["Files to organize into logical, atomic Conventional Commits:"]
+        if is_fr:
+            prompt_lines = ["Fichiers à regrouper en commits Conventional Commits atomiques et logiques :"]
+        elif is_es:
+            prompt_lines = ["Archivos para organizar en commits Conventional Commits atómicos y lógicos:"]
+        else:
+            prompt_lines = ["Files to organize into logical, atomic Conventional Commits:"]
+
         for idx, fa in enumerate(analyses, 1):
             id_map[idx] = [fa["path"]]
-            desc = f"- [{idx}] {fa['path']} [type: {fa['type']}, scope: {fa['scope']}]: {fa['intent']}"
-            if fa.get("links_to"):
-                desc += f" (links: {', '.join(fa['links_to'])})"
+            if is_fr:
+                desc = f"- [{idx}] {fa['path']} [type: {fa['type']}, scope: {fa['scope']}] : {fa['intent']}"
+                if fa.get("links_to"):
+                    desc += f" (liaisons : {', '.join(fa['links_to'])})"
+            elif is_es:
+                desc = f"- [{idx}] {fa['path']} [type: {fa['type']}, scope: {fa['scope']}] : {fa['intent']}"
+                if fa.get("links_to"):
+                    desc += f" (enlaces: {', '.join(fa['links_to'])})"
+            else:
+                desc = f"- [{idx}] {fa['path']} [type: {fa['type']}, scope: {fa['scope']}]: {fa['intent']}"
+                if fa.get("links_to"):
+                    desc += f" (links: {', '.join(fa['links_to'])})"
             prompt_lines.append(desc)
 
     prompt = "\n".join(prompt_lines)
     model_kind = get_model_qualification(args.model, base_url=args.ollama_host)
-    print(f"\033[0;34m[INFO]\033[0m Inférence via {model_kind} '{args.model}' (mode: {'modulaire' if is_modular else 'fichiers'})...")
-    res = call_ollama(prompt, is_modular=is_modular, model=args.model, base_url=args.ollama_host)
+    lang_name = get_language_name(args.lang)
+    print(f"\033[0;34m[INFO]\033[0m Inférence via {model_kind} '{args.model}' (mode: {'modulaire' if is_modular else 'fichiers'}, langue: {lang_name})...")
+    res = call_ollama(prompt, is_modular=is_modular, model=args.model, base_url=args.ollama_host, target_lang=args.lang)
 
     raw_commits = res.get("commits", [])
     if not raw_commits:
@@ -1149,7 +1375,7 @@ def main():
         })
 
     # Nettoyage, déduplication, enrichissement de la description et réconciliation
-    commits = reconcile_and_clean_commits(expanded_commits, files, cwd, analyses_dict=analyses_dict)
+    commits = reconcile_and_clean_commits(expanded_commits, files, cwd, analyses_dict=analyses_dict, target_lang=args.lang)
 
     # Assignation des dates basées sur l'heure réelle de modification (mtime)
     commits = assign_timestamps(commits, cwd, start_date=args.start_date, strategy=args.date_strategy)
