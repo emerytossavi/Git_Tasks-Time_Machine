@@ -27,6 +27,7 @@ MODULES=(
     "runner.sh"
     "updater.sh"
     "doctor.sh"
+    "model.sh"
 )
 
 for module in "${MODULES[@]}"; do
@@ -47,15 +48,18 @@ show_usage() {
     cat <<USAGE
 Usage: gtm <plan|validate|dry-run|run> [options] [chemin/vers/plan.json]
        gtm <doctor|--doctor>
+       gtm <model|config> [nom|--list]
        gtm <update|--update|-update|--u|-u>
 
 Commandes :
-  plan     [options] [plan.json] Génère automatiquement un plan de commits via le SLM local (Qwen2.5-Coder).
+  plan     [options] [plan.json] Génère automatiquement un plan de commits via le SLM local configuré.
                                  Options : -a/--all, --dry-run, --date-strategy <last|first>, --start-date YYYY-MM-DD
   validate [plan.json]           Vérifie la conformité et la chronologie du plan JSON.
   dry-run  [plan.json]           Simule l'exécution sans toucher à Git.
   run      [plan.json]           Exécute les commits du plan dans le dépôt courant.
-  doctor                         Diagnostique l'environnement (Git, jq, date, Python, Ollama).
+  model    [nom|--list]          Affiche, sélectionne ou définit le modèle SLM par défaut dans config.env.
+                                 (Sans argument: menu interactif de sélection parmi les modèles locaux).
+  doctor                         Diagnostique l'environnement (Git, jq, date, Python, Ollama, modèle actif).
   update                         Met à jour Git Tasks-Time Machine depuis le dépôt public.
                                  (Alias acceptés : --update, -update, --u, -u)
 
@@ -87,6 +91,17 @@ main() {
         doctor|--doctor)
             doctor_check_all
             ;;
+        model|models)
+            shift
+            model_cmd "$@"
+            ;;
+        config)
+            shift
+            if [[ "${1:-}" == "model" ]]; then
+                shift
+            fi
+            model_cmd "$@"
+            ;;
         update|--update|-update|--u|-u)
             updater_run
             ;;
@@ -107,7 +122,7 @@ main() {
             ;;
         *)
             log_error "Commande inconnue: $1"
-            log_info "Commandes disponibles: plan, validate, dry-run, run, doctor, update (--u, -update)"
+            log_info "Commandes disponibles: plan, validate, dry-run, run, doctor, model, update (--u, -update)"
             exit 1
             ;;
     esac
