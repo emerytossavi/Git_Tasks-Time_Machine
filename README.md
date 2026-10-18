@@ -22,11 +22,14 @@ Il **n'invente jamais de commits** : il inspecte en profondeur la sémantique de
 - [Démarrage rapide en 30 secondes](#-d%C3%A9marrage-rapide-en-30-secondes)
 - [Guide des commandes](#-guide-des-commandes)
   - [`gtm doctor` (Diagnostic de l'environnement)](#1-gtm-doctor--diagnostic-de-lenvironnement)
-  - [`gtm plan` (Génération intelligente via SLM)](#2-gtm-plan--g%C3%A9n%C3%A9ration-intelligente-par-slm-local)
-  - [`gtm validate` (Validation stricte & chronologique)](#3-gtm-validate--contr%C3%B4le-qualit%C3%A9--chronologique)
-  - [`gtm dry-run` (Simulation visuelle transparente)](#4-gtm-dry-run--simulation-sans-toucher-%C3%A0-git)
-  - [`gtm run` (Exécution réelle dans Git)](#5-gtm-run--application-chirurgicale-dans-git)
-  - [`gtm update` (Mise à jour automatique)](#6-gtm-update--mise-%C3%A0-jour-du-programme)
+  - [`gtm model` (Sélection & configuration du modèle SLM par défaut)](#2-gtm-model--s%C3%A9lection--configuration-du-mod%C3%A8le-slm-par-d%C3%A9faut)
+  - [`gtm lang` (Configuration de la langue des commits)](#3-gtm-lang--configuration-de-la-langue-des-commits)
+  - [`gtm plan` (Génération intelligente via SLM)](#4-gtm-plan--g%C3%A9n%C3%A9ration-intelligente-par-slm-local)
+  - [`gtm validate` (Validation stricte & chronologique)](#5-gtm-validate--contr%C3%B4le-qualit%C3%A9--chronologique)
+  - [`gtm dry-run` (Simulation visuelle transparente)](#6-gtm-dry-run--simulation-sans-toucher-%C3%A0-git)
+  - [`gtm run` (Exécution réelle dans Git)](#7-gtm-run--application-chirurgicale-dans-git)
+  - [`gtm test` (Suite de tests automatisés TDD)](#8-gtm-test--suite-de-tests-automatis%C3%A9s-tdd)
+  - [`gtm update` (Mise à jour automatique)](#9-gtm-update--mise-%C3%A0-jour-du-programme)
 - [Guide de sélection d'un SLM / LLM alternatif](#-guide-de-s%C3%A9lection-dun-slm--llm-alternatif)
 - [Format du plan (`commit-plan.json`)](#-format-du-plan-commit-planjson)
 - [Exemple réel de commit généré](#-exemple-r%C3%A9el-de-commit-g%C3%A9n%C3%A9r%C3%A9)
@@ -187,7 +190,31 @@ Le modèle sélectionné est automatiquement utilisé par `gtm plan` sans avoir 
 
 ---
 
-### 3) `gtm plan` — Génération intelligente par SLM local
+### 3) `gtm lang` — Configuration de la langue des commits
+Permet de définir ou de consulter la langue par défaut utilisée pour la rédaction des messages de commit (sujet et description technique). La langue est enregistrée de manière persistante dans `config.env` :
+
+```bash
+# Afficher la langue actuellement configurée (défaut : en) :
+gtm lang
+
+# Définir l'anglais comme langue par défaut (recommandé pour l'open-source) :
+gtm lang en
+
+# Définir le français comme langue par défaut :
+gtm lang fr
+
+# Alias disponible :
+gtm config lang es
+```
+
+> [!IMPORTANT]
+> **Universalité des types Conventional Commits** :  
+> Quelle que soit la langue sélectionnée (`en`, `fr`, `es`, `de`, `it`, etc.), les **mots-clés de type (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, etc.) restent toujours en anglais standard** conformément à la spécification Conventional Commits v1.0.0. Seuls le résumé et le corps explicatif sont traduits et rédigés dans la langue choisie.
+> De plus, GTM élimine automatiquement les scopes tautologiques (`test(test):` $\to$ `test:`, `docs(docs):` $\to$ `docs:`) et nettoie les numérotations brutes de titres markdown (`1. `, `2) `).
+
+---
+
+### 4) `gtm plan` — Génération intelligente par SLM local
 Analyse l'arborescence, applique 100% des règles `.gitignore` natives du projet, extrait la sémantique technique réelle et fait appel au SLM local sobre configuré pour structurer un plan de commits atomiques.
 
 ```bash
@@ -196,6 +223,7 @@ gtm plan [options] [chemin/vers/plan.json]
 
 #### Options :
 - `-a`, `--all` : analyse l'ensemble des fichiers du projet (au lieu de se limiter aux modifications `git status`).
+- `-l`, `--lang <code>` : force la langue des messages pour cette exécution (`en`, `fr`, `es`, `de`, `it`, `pt`, etc. - types standard toujours en anglais).
 - `--dry-run` : affiche le plan généré dans le terminal sans créer de fichier sur le disque.
 - `--date-strategy <last|first>` : stratégie de datation (`last` = date basée sur le dernier fichier modifié du lot [défaut], `first` = premier).
 - `--start-date YYYY-MM-DDTHH:MM:SS` : impose une date de départ synthétique réaliste étalée sur des heures ouvrées (9h-18h30, hors week-ends).
@@ -209,13 +237,16 @@ gtm plan
 # Planifier l'ensemble d'un projet brut fraîchement importé
 gtm plan -a
 
+# Forcer la rédaction des messages en français
+gtm plan -l fr
+
 # Simuler la planification avec un modèle plus puissant
 gtm plan -a --dry-run -m qwen2.5-coder:7b
 ```
 
 ---
 
-### 4) `gtm validate` — Contrôle qualité & chronologique
+### 5) `gtm validate` — Contrôle qualité & chronologique
 Valide la structure du fichier de plan sans modifier Git :
 ```bash
 gtm validate [chemin/vers/plan.json]
@@ -229,7 +260,7 @@ Contrôles stricts effectués :
 
 ---
 
-### 5) `gtm dry-run` — Simulation sans toucher à Git
+### 6) `gtm dry-run` — Simulation sans toucher à Git
 Affiche le déroulé exact de ce qui sera appliqué dans Git :
 ```bash
 gtm dry-run [chemin/vers/plan.json]
@@ -241,7 +272,7 @@ Pour chaque commit :
 
 ---
 
-### 6) `gtm run` — Application chirurgicale dans Git
+### 7) `gtm run` — Application chirurgicale dans Git
 Exécute chronologiquement les commits dans le dépôt courant :
 ```bash
 gtm run [chemin/vers/plan.json]
@@ -254,18 +285,18 @@ Pour chaque entrée du plan :
 
 ---
 
-### 7) `gtm test` — Suite de tests automatisés (TDD)
+### 8) `gtm test` — Suite de tests automatisés (TDD)
 Exécute l'ensemble de la batterie de tests unitaires (Python standard library `unittest`) et des tests d'intégration en bac à sable Git isolé :
 ```bash
 gtm test
 ```
 - **Tests unitaires Python** : validation de la normalisation des en-têtes Conventional Commits, déduplication, réconciliation des orphelins, tri chronologique strict.
-- **Tests d'intégration Shell** : validation de conformité des plans (`gtm validate`), simulation étanche (`gtm dry-run`), exécution réelle (`gtm run`), persistance de la configuration (`gtm model`).
+- **Tests d'intégration Shell** : validation de conformité des plans (`gtm validate`), simulation étanche (`gtm dry-run`), exécution réelle (`gtm run`), persistance de la configuration (`gtm model`, `gtm lang`).
 - **Garantie zéro régression** : exécution rapide en quelques secondes, sans dépendance pip ou npm externe.
 
 ---
 
-### 8) `gtm update` — Mise à jour du programme
+### 9) `gtm update` — Mise à jour du programme
 Met à jour GTM directement depuis le dépôt officiel :
 ```bash
 gtm update
@@ -313,6 +344,10 @@ Le fichier `config.env` situé à la racine de GTM vous permet de personnaliser 
 # Modèle SLM/LLM par défaut utilisé par 'gtm plan'
 DEFAULT_MODEL="qwen2.5-coder:1.5b"
 
+# Langue par défaut pour la rédaction des commits ('en', 'fr', 'es', 'de', 'it', 'pt', etc.)
+# Note : les types Conventional Commits (feat, fix, docs...) restent toujours en anglais.
+DEFAULT_LANG="en"
+
 # Hôte / Serveur Ollama (défaut: http://localhost:11434)
 # Permet de cibler une machine GPU dédiée sur le réseau local ou un port alternatif :
 # OLLAMA_HOST="http://192.168.1.50:11434"
@@ -321,7 +356,8 @@ OLLAMA_HOST="http://localhost:11434"
 ```
 
 > [!TIP]
-> Si vous utilisez un serveur Ollama distant ou un port non standard, configurez simplement `OLLAMA_HOST` dans `config.env` ou exportez la variable d'environnement standard `export OLLAMA_HOST="http://ip-serveur:port"`. GTM adaptera automatiquement les diagnostics (`gtm doctor`), les requêtes d'inférence (`gtm plan`) et la liste des modèles (`gtm model`).
+> - **Changement de modèle ou de langue** : Utilisez `gtm model <nom>` et `gtm lang <code_langue>` pour mettre à jour automatiquement et proprement `config.env`.
+> - **Serveur Ollama distant** : Si vous utilisez une instance Ollama sur le réseau local ou un port non standard, configurez `OLLAMA_HOST` dans `config.env` ou exportez `export OLLAMA_HOST="http://ip-serveur:port"`. GTM adaptera automatiquement les diagnostics (`gtm doctor`), les requêtes d'inférence (`gtm plan`) et la liste des modèles (`gtm model`).
 
 ---
 
