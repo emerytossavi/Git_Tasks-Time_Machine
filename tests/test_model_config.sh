@@ -83,6 +83,21 @@ assert_equals "OLLAMA_HOST normalisé et exporté" "http://192.168.1.80:11435" "
 val_host=$(grep "^OLLAMA_HOST=" config.env | cut -d'=' -f2 | tr -d '"')
 assert_equals "OLLAMA_HOST persisté dans config.env" "http://192.168.1.80:11435" "$val_host"
 
+# 7. Test gtm lang & DEFAULT_LANG configuration
+assert_exit_code "gtm lang sans argument termine avec 0" 0 ./gtm.sh lang
+assert_exit_code "gtm lang avec argument vide échoue" 1 ./gtm.sh lang ""
+assert_exit_code "gtm lang --list termine avec 0" 0 ./gtm.sh lang --list
+assert_exit_code "gtm lang --help termine avec 0" 0 ./gtm.sh lang --help
+assert_exit_code "gtm lang avec code invalide échoue" 1 ./gtm.sh lang "invalid_long_code"
+./gtm.sh lang fr >/dev/null 2>&1
+val_lang=$(grep "^DEFAULT_LANG=" config.env | cut -d'=' -f2 | tr -d '"')
+assert_equals "DEFAULT_LANG persisté dans config.env" "fr" "$val_lang"
+
+# 8. Test gtm config lang (sous-commande config)
+./gtm.sh config lang es >/dev/null 2>&1
+val_lang_es=$(grep "^DEFAULT_LANG=" config.env | cut -d'=' -f2 | tr -d '"')
+assert_equals "Sous-commande config lang persistée" "es" "$val_lang_es"
+
 echo
 if (( FAILED > 0 )); then
     printf "\033[0;31mÉchec : %d test(s) échoué(s) sur %d.\033[0m\n" "$FAILED" "$((PASSED + FAILED))"
