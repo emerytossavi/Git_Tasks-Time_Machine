@@ -169,8 +169,26 @@ Vérifie la présence et la version de :
 
 ---
 
-### 2) `gtm plan` — Génération intelligente par SLM local
-Analyse l'arborescence, applique 100% des règles `.gitignore` natives du projet, extrait la sémantique technique réelle et fait appel au SLM local sobre pour structurer un plan de commits atomiques.
+### 2) `gtm model` — Sélection & configuration du modèle SLM par défaut
+Permet de choisir interactivement parmi les modèles disponibles sur votre machine ou d'affecter un modèle par défaut stocké de manière persistante dans le fichier `config.env` :
+
+```bash
+# Menu interactif listant tous les modèles Ollama installés localement :
+gtm model
+
+# Lister les modèles et afficher le modèle actif :
+gtm model --list
+
+# Définir directement un modèle par défaut (sauvegardé dans config.env) :
+gtm model qwen2.5-coder:7b
+```
+
+Le modèle sélectionné est automatiquement utilisé par `gtm plan` sans avoir à repréciser le drapeau `-m`.
+
+---
+
+### 3) `gtm plan` — Génération intelligente par SLM local
+Analyse l'arborescence, applique 100% des règles `.gitignore` natives du projet, extrait la sémantique technique réelle et fait appel au SLM local sobre configuré pour structurer un plan de commits atomiques.
 
 ```bash
 gtm plan [options] [chemin/vers/plan.json]
@@ -197,7 +215,7 @@ gtm plan -a --dry-run -m qwen2.5-coder:7b
 
 ---
 
-### 3) `gtm validate` — Contrôle qualité & chronologique
+### 4) `gtm validate` — Contrôle qualité & chronologique
 Valide la structure du fichier de plan sans modifier Git :
 ```bash
 gtm validate [chemin/vers/plan.json]
@@ -211,7 +229,7 @@ Contrôles stricts effectués :
 
 ---
 
-### 4) `gtm dry-run` — Simulation sans toucher à Git
+### 5) `gtm dry-run` — Simulation sans toucher à Git
 Affiche le déroulé exact de ce qui sera appliqué dans Git :
 ```bash
 gtm dry-run [chemin/vers/plan.json]
@@ -223,7 +241,7 @@ Pour chaque commit :
 
 ---
 
-### 5) `gtm run` — Application chirurgicale dans Git
+### 6) `gtm run` — Application chirurgicale dans Git
 Exécute chronologiquement les commits dans le dépôt courant :
 ```bash
 gtm run [chemin/vers/plan.json]
@@ -236,7 +254,7 @@ Pour chaque entrée du plan :
 
 ---
 
-### 6) `gtm update` — Mise à jour du programme
+### 7) `gtm update` — Mise à jour du programme
 Met à jour GTM directement depuis le dépôt officiel :
 ```bash
 gtm update
@@ -254,6 +272,8 @@ gtm -u
 ## 🧠 Guide de sélection d'un SLM / LLM alternatif
 
 GTM utilise par défaut **Qwen2.5-Coder 1.5B**, choisi pour son **efficacité énergétique exemplaire** (tourne sur n'importe quel CPU en quelques secondes, consomme moins de 1 Go de RAM et se décharge immédiatement grâce à `keep_alive: 0`).
+
+Vous pouvez changer ce modèle par défaut à tout moment de manière persistante avec `gtm model` (enregistré dans `config.env`), ou ponctuellement via `gtm plan -m <nom>`.
 
 Si vous souhaitez utiliser un autre modèle via `gtm plan -m <nom>`, respectez ces **4 critères de compatibilité** :
 
