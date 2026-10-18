@@ -46,7 +46,7 @@ config_set_plan_file "${2:-commit-plan.json}"
 
 show_usage() {
     cat <<USAGE
-Usage: gtm <plan|validate|dry-run|run> [options] [chemin/vers/plan.json]
+Usage: gtm <plan|validate|dry-run|run|test> [options] [chemin/vers/plan.json]
        gtm <doctor|--doctor>
        gtm <model|config> [nom|--list]
        gtm <update|--update|-update|--u|-u>
@@ -57,6 +57,7 @@ Commandes :
   validate [plan.json]           Vérifie la conformité et la chronologie du plan JSON.
   dry-run  [plan.json]           Simule l'exécution sans toucher à Git.
   run      [plan.json]           Exécute les commits du plan dans le dépôt courant.
+  test                           Lance l'intégralité de la suite de tests automatisés (unitaires et intégration).
   model    [nom|--list]          Affiche, sélectionne ou définit le modèle SLM par défaut dans config.env.
                                  (Sans argument: menu interactif de sélection parmi les modèles locaux).
   doctor                         Diagnostique l'environnement (Git, jq, date, Python, Ollama, modèle actif).
@@ -120,9 +121,13 @@ main() {
             date_init_engine
             runner_run "$PLAN_FILE"
             ;;
+        test|tests)
+            shift
+            "$GTM_DIR/tests/run_tests.sh" "$@"
+            ;;
         *)
             log_error "Commande inconnue: $1"
-            log_info "Commandes disponibles: plan, validate, dry-run, run, doctor, model, update (--u, -update)"
+            log_info "Commandes disponibles: plan, validate, dry-run, run, test, doctor, model, update (--u, -update)"
             exit 1
             ;;
     esac
