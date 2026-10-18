@@ -107,6 +107,36 @@ else
     FAILED=$((FAILED + 1))
 fi
 
+# 3. Test d'exécution par défaut avec .gtm/commit-plan.json et zéro résidu
+rm -f test_plan.json
+mkdir -p .gtm
+echo "*" > .gtm/.gitignore
+echo "content file 3" > file3.txt
+cat <<EOF > .gtm/commit-plan.json
+{
+  "commits": [
+    {
+      "date": "2026-10-18T11:00:00+01:00",
+      "message": "feat(module): add isolated file3\n\nExplanation of file 3.",
+      "files": ["file3.txt"]
+    }
+  ]
+}
+EOF
+
+assert_exit_code "gtm dry-run sans argument résout .gtm/commit-plan.json" 0 "$PROJECT_ROOT/gtm.sh" dry-run
+assert_exit_code "gtm run sans argument applique .gtm/commit-plan.json" 0 "$PROJECT_ROOT/gtm.sh" run
+
+# Vérifier que git status est 100% propre (zéro résidu de .gtm dans git status)
+gtm_residue=$(git status --porcelain)
+if [[ -z "$gtm_residue" ]]; then
+    printf "  \033[0;32m✔\033[0m Zéro résidu git : le dossier .gtm est 100%% ignoré par git status\n"
+    PASSED=$((PASSED + 1))
+else
+    printf "  \033[0;31m✘\033[0m Résidu détecté dans git status : %s\n" "$gtm_residue"
+    FAILED=$((FAILED + 1))
+fi
+
 echo
 if (( FAILED > 0 )); then
     printf "\033[0;31mÉchec : %d test(s) échoué(s) sur %d.\033[0m\n" "$FAILED" "$((PASSED + FAILED))"
