@@ -16,6 +16,12 @@ fi
 chmod +x "$GTM_SRC"
 chmod +x "$REPO_DIR"/lib/*.sh 2>/dev/null || true
 
+# Initialisation de la configuration locale privée à partir du modèle si absente
+if [[ ! -f "$REPO_DIR/config.env" && -f "$REPO_DIR/config.env.example" ]]; then
+  cp "$REPO_DIR/config.env.example" "$REPO_DIR/config.env"
+  print_report "OK" "Configuration locale créée : config.env (ignorée par Git)"
+fi
+
 # Choix du dossier bin : celui déjà présent et déjà dans le PATH est
 # préféré, sinon ~/.local/bin (convention Linux), sinon ~/bin (Git Bash).
 BIN_DIR=""
