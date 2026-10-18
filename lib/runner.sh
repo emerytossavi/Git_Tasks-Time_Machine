@@ -33,7 +33,14 @@ runner_dry_run() {
         echo "Message:"
         printf '%s\n' "$COMMIT_MESSAGE"
         echo "Fichiers:"
-        printf '  - %s\n' "${expanded[@]}"
+        local f
+        for f in "${expanded[@]}"; do
+            if [[ ! -e "$f" ]]; then
+                printf '  - %s [supprimé]\n' "$f"
+            else
+                printf '  - %s\n' "$f"
+            fi
+        done
         echo
 
     done < <(jq -c '.commits[]' "$plan_file")
