@@ -2,5 +2,6 @@
 .claude/
 
 commit-plan.json
+.gtm/
 __pycache__/
 *.pyc
