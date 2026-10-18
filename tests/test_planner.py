@@ -129,5 +129,57 @@ class TestPlannerUnit(unittest.TestCase):
             else:
                 os.environ.pop("DEFAULT_MODEL", None)
 
+    def test_get_configured_ollama_host(self):
+        """Vérifie la résolution et normalisation de l'hôte Ollama configuré."""
+        old_host = os.environ.get("OLLAMA_HOST")
+        old_base = os.environ.get("OLLAMA_BASE_URL")
+        try:
+            # 1. URL complète avec port personnalisé
+            os.environ["OLLAMA_HOST"] = "http://192.168.1.100:11435"
+            self.assertEqual(planner.get_configured_ollama_host(), "http://192.168.1.100:11435")
+
+            # 2. URL sans schéma http:// et avec slash final (doit être normalisée)
+            os.environ["OLLAMA_HOST"] = "remote-server.lan:11434/"
+            self.assertEqual(planner.get_configured_ollama_host(), "http://remote-server.lan:11434")
+
+            # 3. Via OLLAMA_BASE_URL
+            os.environ.pop("OLLAMA_HOST", None)
+            os.environ["OLLAMA_BASE_URL"] = "https://secure-ai.corp:8443"
+            self.assertEqual(planner.get_configured_ollama_host(), "https://secure-ai.corp:8443")
+        finally:
+            if old_host is not None:
+                os.environ["OLLAMA_HOST"] = old_host
+            else:
+                os.environ.pop("OLLAMA_HOST", None)
+            if old_base is not None:
+                os.environ["OLLAMA_BASE_URL"] = old_base
+            else:
+                os.environ.pop("OLLAMA_BASE_URL", None)
+
+    def test_classify_model(self):
+        """Vérifie la qualification honnête et dynamique du modèle selon sa taille réelle."""
+        # 1. Modèles SLM sobres (<= 3.5B ou en Millions de paramètres)
+        self.assertEqual(planner.classify_model("qwen2.5-coder:1.5b"), "SLM sobre")
+        self.assertEqual(planner.classify_model("llama3.2:3b"), "SLM sobre")
+        self.assertEqual(planner.classify_model("smollm:360m"), "SLM sobre")
+        self.assertEqual(planner.classify_model("custom", param_size="1.5B"), "SLM sobre")
+        self.assertEqual(planner.classify_model("custom", param_size="500M"), "SLM sobre")
+
+        # 2. Modèles LLM intermédiaires (4B - 14B)
+        self.assertEqual(planner.classify_model("qwen2.5-coder:7b"), "LLM local")
+        self.assertEqual(planner.classify_model("llama3.1:8b"), "LLM local")
+        self.assertEqual(planner.classify_model("deepseek-r1:14b"), "LLM local")
+        self.assertEqual(planner.classify_model("custom", param_size="7.6B"), "LLM local")
+
+        # 3. Modèles LLM haute capacité (> 14B)
+        self.assertEqual(planner.classify_model("codestral:22b"), "LLM haute capacité")
+        self.assertEqual(planner.classify_model("deepseek-r1:32b"), "LLM haute capacité")
+        self.assertEqual(planner.classify_model("llama3.1:70b"), "LLM haute capacité")
+        self.assertEqual(planner.classify_model("custom", param_size="70B"), "LLM haute capacité")
+
+        # 4. Modèle inconnu sans indication de taille
+        self.assertEqual(planner.classify_model("my-custom-model"), "modèle local")
+        self.assertEqual(planner.classify_model(""), "modèle local")
+
 if __name__ == "__main__":
     unittest.main()
