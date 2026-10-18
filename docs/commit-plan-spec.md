@@ -111,8 +111,13 @@ Grâce au fichier `.gtm/.gitignore` généré automatiquement avec la directive 
   - Pas de majuscule en début de sujet (ex: `feat(api): add auth` et non `feat(api): Add auth`).
   - Pas de point final dans la première ligne.
   - Longueur recommandée de l'en-tête : $\le 72$ caractères (maximum toléré : 100 caractères).
+  - Éviter les scopes tautologiques où le scope répète le type (ex: préférer `test: ...` ou `test(unit): ...` à `test(test): ...`, et `docs: ...` à `docs(docs): ...`).
+  - Épurer les numérotations brutes issues de sections markdown (ex: `add Overview` au lieu de `add 1. Overview`).
 - **Règle de séparation du corps** :  
   Une ligne vide (`\n\n`) doit séparer l'en-tête du corps de message.
+- **Règle linguistique et universalité des types** :
+  - **Mots-clés de type immuables** : Les types (`feat`, `fix`, `docs`, etc.) demeurent impérativement en anglais standard, garantissant l'interopérabilité universelle avec les outils d'écosystème (`@commitlint`, `semantic-release`, `cz-cli`).
+  - **Homogénéité rédactionnelle** : Le résumé et le corps de description doivent être rédigés de façon homogène dans la langue cible choisie (`DEFAULT_LANG="en"`, ou `fr`, `es`, etc.), sans alternance hétérogène de langues ("franglais") ni copie brute de métadonnées non traduites.
 
 ### 3.3. `files`
 - **Format** : Tableau de chaînes représentant des chemins relatifs à la racine du dépôt de travail.
