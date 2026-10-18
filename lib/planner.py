@@ -155,10 +155,12 @@ def scan_directory(cwd: Path, all_files=False):
 
 def clean_scope_name(raw_name: str) -> str:
     """Normalise un nom de scope pour Conventional Commits (minuscules, sans préfixes numériques ni caractères spéciaux)."""
-    name = raw_name.lower().strip()
+    name = (raw_name or "").lower().strip()
     name = re.sub(r'^[0-9]+[_\-]*', '', name)
     name = name.replace("_", "-")
     name = re.sub(r'[^a-z0-9\-]', '', name)
+    if not name:
+        return "core"
     
     if "formalite" in name:
         return "formalites"
@@ -777,7 +779,7 @@ def sanitize_commit_header(subject: str, commit_files: list = None) -> str:
         rest = rest[0].lower() + rest[1:]
 
     # S'assurer d'avoir un verbe impératif
-    valid_verbs = r'^(?:add|configure|setup|implement|update|remove|fix|refactor|create|define|integrate|orchestrate|support|document|provide)\b'
+    valid_verbs = r'^(?:add|configure|setup|implement|update|remove|fix|refactor|create|define|integrate|orchestrate|support|document|provide|clean|cleanup)\b'
     if not re.match(valid_verbs, rest, re.IGNORECASE):
         rest = f"add {rest}"
 
