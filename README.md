@@ -254,7 +254,18 @@ Pour chaque entrée du plan :
 
 ---
 
-### 7) `gtm update` — Mise à jour du programme
+### 7) `gtm test` — Suite de tests automatisés (TDD)
+Exécute l'ensemble de la batterie de tests unitaires (Python standard library `unittest`) et des tests d'intégration en bac à sable Git isolé :
+```bash
+gtm test
+```
+- **Tests unitaires Python** : validation de la normalisation des en-têtes Conventional Commits, déduplication, réconciliation des orphelins, tri chronologique strict.
+- **Tests d'intégration Shell** : validation de conformité des plans (`gtm validate`), simulation étanche (`gtm dry-run`), exécution réelle (`gtm run`), persistance de la configuration (`gtm model`).
+- **Garantie zéro régression** : exécution rapide en quelques secondes, sans dépendance pip ou npm externe.
+
+---
+
+### 8) `gtm update` — Mise à jour du programme
 Met à jour GTM directement depuis le dépôt officiel :
 ```bash
 gtm update
