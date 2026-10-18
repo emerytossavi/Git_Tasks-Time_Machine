@@ -43,6 +43,10 @@ config_init() {
     fi
     OLLAMA_HOST="${OLLAMA_HOST%/}"
     export OLLAMA_HOST
+
+    DEFAULT_LANG="${DEFAULT_LANG:-en}"
+    DEFAULT_LANG="$(echo "$DEFAULT_LANG" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+    export DEFAULT_LANG
 }
 
 config_ensure_gtm_dir() {
@@ -145,4 +149,104 @@ EOF
 
     OLLAMA_HOST="$new_host"
     export OLLAMA_HOST
+}
+
+config_set_default_lang() {
+    local new_lang="$1"
+    local config_file="$GTM_DIR/config.env"
+
+    if [[ -z "$new_lang" ]]; then
+        return 1
+    fi
+
+    # Nettoyer les guillemets ou espaces superflus et convertir en minuscules
+    new_lang="$(echo "$new_lang" | tr -d '\"'"'" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
+
+    if [[ ! -f "$config_file" ]]; then
+        cat <<EOF > "$config_file"
+# Git Tasks-Time Machine Configuration
+# Standards: POSIX shell variable assignment / sourceable config
+
+REPO_URL="https://github.com/emerytossavi/Git_Tasks-Time_Machine.git"
+REPO_BRANCH="main"
+RAW_FILE_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Machine/main/gtm.sh"
+
+DEFAULT_MODEL="qwen2.5-coder:1.5b"
+OLLAMA_HOST="http://localhost:11434"
+DEFAULT_LANG="$new_lang"
+EOF
+    elif grep -q "^DEFAULT_LANG=" "$config_file" 2>/dev/null; then
+        local tmp_file
+        tmp_file="$(mktemp "${TMPDIR:-/tmp}/gtm_config.XXXXXX")"
+        sed "s|^DEFAULT_LANG=.*|DEFAULT_LANG=\"$new_lang\"|" "$config_file" > "$tmp_file"
+        mv "$tmp_file" "$config_file"
+    else
+        printf '\n# Langue des messages de commit générés\nDEFAULT_LANG="%s"\n' "$new_lang" >> "$config_file"
+    fi
+
+    DEFAULT_LANG="$new_lang"
+    export DEFAULT_LANG
+}
+
+lang_cmd() {
+    if [[ $# -eq 0 ]]; then
+        echo "=== Configuration de la langue des commits (config.env) ==="
+        printf "• Langue active : \033[1;32m%s\033[0m\n" "${DEFAULT_LANG:-en}"
+        echo
+        echo "Pour changer la langue par défaut :"
+        echo "  gtm lang <en|fr|es|de|...>"
+        echo
+        echo "Options :"
+        echo "  -l, --list    Lister les principales langues supportées"
+        echo "  -h, --help    Afficher l'aide de la commande"
+        echo
+        echo "Note : Les types Conventional Commits (feat, fix, docs...) restent toujours standardisés."
+        return 0
+    fi
+
+    case "$1" in
+        --help|-h)
+            echo "Usage: gtm lang [code_langue]"
+            echo
+            echo "Consulte ou configure la langue par défaut pour la rédaction des commits."
+            echo "Options :"
+            echo "  -l, --list    Lister les principales langues supportées"
+            echo "  -h, --help    Afficher cette aide"
+            return 0
+            ;;
+        --list|-l)
+            echo "=== Langues supportées pour la génération des commits ==="
+            echo "  • en : English (défaut)"
+            echo "  • fr : Français"
+            echo "  • es : Español"
+            echo "  • de : Deutsch"
+            echo "  • it : Italiano"
+            echo "  • pt : Português"
+            echo "  • nl : Nederlands"
+            echo "  • ru : Русский"
+            echo "  • zh : 中文"
+            echo "  • ja : 日本語"
+            return 0
+            ;;
+    esac
+
+    local target_lang="$1"
+    target_lang="$(echo "$target_lang" | tr -d '\"'"'" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
+    if [[ -z "$target_lang" ]]; then
+        log_error "Code de langue vide ou non spécifié."
+        return 1
+    fi
+
+    if [[ ! "$target_lang" =~ ^[a-z]{2}(-[a-z]{2,4})?$ ]]; then
+        log_error "Code de langue invalide : '$1'. Utilisez un code ISO court (ex: en, fr, es, de, pt-br)."
+        return 1
+    fi
+
+    if config_set_default_lang "$target_lang"; then
+        log_ok "Langue par défaut mise à jour avec succès : '$DEFAULT_LANG' (sauvegardée dans config.env)"
+        return 0
+    else
+        log_error "Impossible d'enregistrer la langue dans config.env"
+        return 1
+    fi
 }
