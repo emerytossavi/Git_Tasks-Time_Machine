@@ -45,9 +45,27 @@ config_init() {
     export OLLAMA_HOST
 }
 
+config_ensure_gtm_dir() {
+    local target_dir="${1:-.gtm}"
+    if [[ ! -d "$target_dir" ]]; then
+        mkdir -p "$target_dir"
+    fi
+    if [[ ! -f "$target_dir/.gitignore" ]]; then
+        printf '*\n' > "$target_dir/.gitignore"
+    fi
+}
+
 config_set_plan_file() {
-    local candidate="${1:-commit-plan.json}"
-    PLAN_FILE="$candidate"
+    local candidate="${1:-}"
+    if [[ -n "$candidate" ]]; then
+        PLAN_FILE="$candidate"
+    elif [[ -f ".gtm/commit-plan.json" ]]; then
+        PLAN_FILE=".gtm/commit-plan.json"
+    elif [[ -f "commit-plan.json" ]]; then
+        PLAN_FILE="commit-plan.json"
+    else
+        PLAN_FILE=".gtm/commit-plan.json"
+    fi
 }
 
 config_set_default_model() {
