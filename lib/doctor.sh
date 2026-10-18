@@ -89,6 +89,8 @@ doctor_check_all() {
         fi
     fi
 
+    printf "• Langue commits  : %s [active dans config.env]\n" "${DEFAULT_LANG:-en}"
+
     echo
     # 6. Contexte courant
     printf "• Dépôt Git local : "
