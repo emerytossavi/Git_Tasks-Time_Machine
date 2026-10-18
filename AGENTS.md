@@ -119,12 +119,28 @@ gtm model qwen2.5-coder:7b
 - **Exit 0**: Model successfully listed or saved.
 - **Exit 1**: Unrecognized arguments or empty input.
 
-### 3.7. `gtm test`
+### 3.7. `gtm lang [lang_code]`
+Inspects or persistently configures the target commit message language in `config.env`:
+- Conventional Commit types (`feat`, `fix`, `docs`, etc.) always remain standardized in English.
+- The message summary and body description are generated strictly in the chosen language without multilingual mixing.
+
+```bash
+# Show active commit language
+gtm lang
+
+# Set default commit language (writes DEFAULT_LANG to config.env)
+gtm lang fr
+gtm lang en
+```
+- **Exit 0**: Language successfully displayed or saved.
+- **Exit 1**: Missing language code.
+
+### 3.8. `gtm test`
 Executes the comprehensive automated TDD test suite (Python `unittest` and isolated Shell sandboxes):
-- Planner unit tests (sanitization, reconciliation, monotonicity, configuration).
+- Planner unit tests (sanitization, reconciliation, monotonicity, configuration, languages).
 - Validator integration tests (valid plans, missing files, malformed JSON, dates).
-- Model and config integration tests (persistence, fallbacks, list modes).
-- Runner and simulation tests (dry-run, atomic commit execution, exact timestamps).
+- Model and config integration tests (persistence, fallbacks, list modes, lang).
+- Runner and simulation tests (dry-run, atomic commit execution, exact timestamps, zero-residue).
 
 ```bash
 gtm test
