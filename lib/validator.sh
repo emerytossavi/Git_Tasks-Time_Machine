@@ -98,8 +98,10 @@ validator_validate_plan() {
             local m
             for m in "${matches[@]}"; do
                 if [[ ! -e "$m" ]]; then
-                    log_error "Commit #$idx: fichier inexistant: $m"
-                    exit 1
+                    if ! git_is_file_deleted "$m"; then
+                        log_error "Commit #$idx: fichier inexistant: $m"
+                        exit 1
+                    fi
                 fi
             done
         done
