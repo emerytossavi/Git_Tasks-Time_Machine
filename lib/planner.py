@@ -569,6 +569,8 @@ def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b
 
 def generate_synthetic_timestamps(commits, start_date=None, interval_min=45, interval_max=120):
     """Génère des timestamps synthétiques répartis sur des heures ouvrées."""
+    if not commits:
+        return []
     now = datetime.now().astimezone()
     tz = now.tzinfo
     n_commits = len(commits)
@@ -607,6 +609,8 @@ def assign_timestamps(commits, cwd: Path, start_date=None, strategy="last"):
       - 'first': se base sur le premier fichier modifié du lot (min)
     Garantit l'ordre chronologique strict requis par validator.sh.
     """
+    if not commits:
+        return []
     now = datetime.now().astimezone()
     tz = now.tzinfo
 
@@ -915,13 +919,35 @@ def reconcile_and_clean_commits(commits, all_files, cwd: Path, analyses_dict: di
 
     return cleaned_commits
 
+def get_configured_default_model() -> str:
+    """Récupère le modèle configuré dans l'environnement ou dans config.env."""
+    env_model = os.environ.get("DEFAULT_MODEL", "").strip()
+    if env_model:
+        return env_model
+
+    config_path = Path(__file__).resolve().parent.parent / "config.env"
+    if config_path.is_file():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("DEFAULT_MODEL="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            return val
+        except Exception:
+            pass
+
+    return "qwen2.5-coder:1.5b"
+
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Générateur sobre de commit-plan.json via SLM local (Qwen2.5-Coder 1.5B).")
+    default_model = get_configured_default_model()
+    parser = argparse.ArgumentParser(description=f"Générateur sobre de commit-plan.json via SLM local (défaut: {default_model}).")
     parser.add_argument("plan_file", nargs="?", default="commit-plan.json", help="Fichier de sortie (défaut: commit-plan.json)")
     parser.add_argument("-o", "--output", default=None, help="Chemin alternatif du fichier de sortie")
     parser.add_argument("-a", "--all", action="store_true", help="Analyser tous les fichiers du dossier (pas uniquement git status)")
-    parser.add_argument("-m", "--model", default="qwen2.5-coder:1.5b", help="Modèle Ollama (défaut: qwen2.5-coder:1.5b)")
+    parser.add_argument("-m", "--model", default=default_model, help=f"Modèle Ollama (défaut configuré: {default_model})")
     parser.add_argument("--start-date", default=None, help="Date de départ ISO (ex: 2026-10-10T09:00:00)")
     parser.add_argument("--date-strategy", choices=["last", "first"], default="last", help="Dater selon le 'last' (dernier fichier modifié, défaut) ou 'first' (premier)")
     parser.add_argument("--dry-run", action="store_true", help="Afficher le plan généré sans modifier de fichier")
