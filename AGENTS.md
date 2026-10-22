@@ -135,7 +135,21 @@ gtm lang en
 - **Exit 0**: Language successfully displayed or saved.
 - **Exit 1**: Missing language code.
 
-### 3.8. `gtm test`
+### 3.8. `gtm timeout [seconds]`
+Inspects or persistently configures the Ollama inference timeout in `config.env` (default: 180s):
+
+```bash
+# Show active inference timeout
+gtm timeout
+
+# Set default inference timeout in seconds (writes OLLAMA_TIMEOUT to config.env)
+gtm timeout 240
+gtm timeout 300
+```
+- **Exit 0**: Timeout successfully displayed or saved.
+- **Exit 1**: Missing or invalid timeout value (< 10).
+
+### 3.9. `gtm test`
 Executes the comprehensive automated TDD test suite (Python `unittest` and isolated Shell sandboxes):
 - Planner unit tests (sanitization, reconciliation, monotonicity, configuration, languages).
 - Validator integration tests (valid plans, missing files, malformed JSON, dates).
