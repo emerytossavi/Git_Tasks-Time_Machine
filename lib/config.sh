@@ -72,7 +72,7 @@ config_ensure_gtm_dir() {
 
 config_set_plan_file() {
     local candidate="${1:-}"
-    if [[ -n "$candidate" ]]; then
+    if [[ -n "$candidate" && "$candidate" != -* ]]; then
         PLAN_FILE="$candidate"
     elif [[ -f ".gtm/commit-plan.json" ]]; then
         PLAN_FILE=".gtm/commit-plan.json"
