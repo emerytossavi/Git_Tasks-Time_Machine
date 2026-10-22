@@ -50,6 +50,7 @@ Usage: gtm <plan|validate|dry-run|run|test> [options] [chemin/vers/plan.json]
        gtm <doctor|--doctor>
        gtm <model|config> [nom|--list]
        gtm <lang> [code]
+       gtm <timeout> [secondes]
        gtm <update|--update|-update|--u|-u>
 
 Commandes :
@@ -62,6 +63,7 @@ Commandes :
   model    [nom|--list]          Affiche, sélectionne ou définit le modèle SLM par défaut dans config.env.
                                  (Sans argument: menu interactif de sélection parmi les modèles locaux).
   lang     [code]                Affiche ou définit la langue des messages dans config.env (défaut: en).
+  timeout  [secondes]            Affiche ou définit le timeout d'inférence Ollama dans config.env (défaut: 180s).
   doctor                         Diagnostique l'environnement (Git, jq, date, Python, Ollama, modèle actif, langue).
   update                         Met à jour Git Tasks-Time Machine depuis le dépôt public.
                                  (Alias acceptés : --update, -update, --u, -u)
@@ -103,6 +105,10 @@ main() {
             shift
             lang_cmd "$@"
             ;;
+        timeout)
+            shift
+            timeout_cmd "$@"
+            ;;
         config)
             shift
             if [[ "${1:-}" == "model" ]]; then
@@ -111,6 +117,9 @@ main() {
             elif [[ "${1:-}" == "lang" || "${1:-}" == "language" ]]; then
                 shift
                 lang_cmd "$@"
+            elif [[ "${1:-}" == "timeout" ]]; then
+                shift
+                timeout_cmd "$@"
             else
                 model_cmd "$@"
             fi
