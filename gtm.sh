@@ -57,8 +57,10 @@ Commandes :
   plan     [options] [plan.json] Génère automatiquement un plan de commits via le SLM local configuré.
                                  Options : -a/--all, -l/--lang <en|fr|...>, --dry-run, --date-strategy <last|first>, --start-date YYYY-MM-DD
   validate [plan.json]           Vérifie la conformité et la chronologie du plan JSON.
-  dry-run  [plan.json]           Simule l'exécution sans toucher à Git.
-  run      [plan.json]           Exécute les commits du plan dans le dépôt courant.
+  dry-run  [options] [plan.json] Simule l'exécution sans toucher à Git (supporte --force).
+  run      [options] [plan.json] Exécute les commits du plan dans le dépôt courant (idempotent).
+                                 Options : --force (ré-exécute les commits déjà appliqués),
+                                           --reset (réinitialise l'état d'application du plan).
   test                           Lance l'intégralité de la suite de tests automatisés (unitaires et intégration).
   model    [nom|--list]          Affiche, sélectionne ou définit le modèle SLM par défaut dans config.env.
                                  (Sans argument: menu interactif de sélection parmi les modèles locaux).
@@ -133,14 +135,14 @@ main() {
             validator_validate_plan "$PLAN_FILE"
             ;;
         dry-run)
-            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            shift
             date_init_engine
-            runner_dry_run "$PLAN_FILE"
+            runner_dry_run "$@"
             ;;
         run)
-            if [[ $# -gt 2 ]]; then show_usage; exit 1; fi
+            shift
             date_init_engine
-            runner_run "$PLAN_FILE"
+            runner_run "$@"
             ;;
         test|tests)
             shift
