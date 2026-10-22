@@ -7,6 +7,7 @@ DEFAULT_RAW_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_M
 DEFAULT_BRANCH="main"
 DEFAULT_SLM_MODEL="qwen2.5-coder:1.5b"
 DEFAULT_OLLAMA_HOST="http://localhost:11434"
+DEFAULT_SLM_TIMEOUT="180"
 
 config_init() {
     local source_script="$1"
@@ -53,6 +54,10 @@ config_init() {
     DEFAULT_LANG="${DEFAULT_LANG:-en}"
     DEFAULT_LANG="$(echo "$DEFAULT_LANG" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
     export DEFAULT_LANG
+
+    OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-${GTM_TIMEOUT:-$DEFAULT_SLM_TIMEOUT}}"
+    OLLAMA_TIMEOUT="$(echo "$OLLAMA_TIMEOUT" | tr -d '\"'"'" | tr -d ' ')"
+    export OLLAMA_TIMEOUT
 }
 
 config_ensure_gtm_dir() {
@@ -95,6 +100,7 @@ RAW_FILE_URL="https://raw.githubusercontent.com/emerytossavi/Git_Tasks-Time_Mach
 DEFAULT_MODEL="qwen2.5-coder:1.5b"
 OLLAMA_HOST="http://localhost:11434"
 DEFAULT_LANG="en"
+OLLAMA_TIMEOUT="180"
 EOF
         fi
     fi
@@ -241,6 +247,80 @@ lang_cmd() {
         return 0
     else
         log_error "Impossible d'enregistrer la langue dans config.env"
+        return 1
+    fi
+}
+
+config_set_ollama_timeout() {
+    local new_timeout="$1"
+    local config_file="$GTM_DIR/config.env"
+
+    if [[ -z "$new_timeout" ]]; then
+        return 1
+    fi
+
+    # Nettoyer les guillemets ou espaces superflus
+    new_timeout="$(echo "$new_timeout" | tr -d '\"'"'" | tr -d ' ')"
+    if [[ ! "$new_timeout" =~ ^[0-9]+$ ]] || (( new_timeout < 10 )); then
+        return 1
+    fi
+
+    config_ensure_file
+
+    if grep -q "^OLLAMA_TIMEOUT=" "$config_file" 2>/dev/null; then
+        local tmp_file
+        tmp_file="$(mktemp "${TMPDIR:-/tmp}/gtm_config.XXXXXX")"
+        sed "s|^OLLAMA_TIMEOUT=.*|OLLAMA_TIMEOUT=\"$new_timeout\"|" "$config_file" > "$tmp_file"
+        mv "$tmp_file" "$config_file"
+    else
+        printf '\n# Timeout d'\''inférence en secondes pour Ollama\nOLLAMA_TIMEOUT="%s"\n' "$new_timeout" >> "$config_file"
+    fi
+
+    OLLAMA_TIMEOUT="$new_timeout"
+    export OLLAMA_TIMEOUT
+}
+
+timeout_cmd() {
+    if [[ $# -eq 0 ]]; then
+        echo "=== Configuration du timeout Ollama (config.env) ==="
+        printf "• Timeout actif : \033[1;32m%ss\033[0m\n" "${OLLAMA_TIMEOUT:-180}"
+        echo
+        echo "Pour changer le timeout par défaut :"
+        echo "  gtm timeout <secondes> (ex: gtm timeout 300)"
+        echo
+        echo "Options :"
+        echo "  -h, --help    Afficher l'aide de la commande"
+        return 0
+    fi
+
+    case "$1" in
+        --help|-h)
+            echo "Usage: gtm timeout [secondes]"
+            echo
+            echo "Consulte ou configure le délai maximal (timeout) accordé à l'inférence Ollama."
+            echo "Options :"
+            echo "  -h, --help    Afficher cette aide"
+            return 0
+            ;;
+    esac
+
+    local target_timeout="$1"
+    target_timeout="$(echo "$target_timeout" | tr -d '\"'"'" | tr -d ' ')"
+    if [[ -z "$target_timeout" ]]; then
+        log_error "Valeur de timeout vide ou non spécifiée."
+        return 1
+    fi
+
+    if [[ ! "$target_timeout" =~ ^[0-9]+$ ]] || (( target_timeout < 10 )); then
+        log_error "Timeout invalide : '$1'. Spécifiez un nombre entier de secondes supérieur ou égal à 10 (ex: 180, 300)."
+        return 1
+    fi
+
+    if config_set_ollama_timeout "$target_timeout"; then
+        log_ok "Timeout Ollama mis à jour avec succès : '${OLLAMA_TIMEOUT}s' (sauvegardé dans config.env)"
+        return 0
+    else
+        log_error "Impossible d'enregistrer le timeout dans config.env"
         return 1
     fi
 }
