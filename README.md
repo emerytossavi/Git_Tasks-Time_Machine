@@ -4,7 +4,7 @@
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://conventionalcommits.org)
 [![Commitlint](https://img.shields.io/badge/@commitlint/config--conventional-compliant-green.svg)](https://github.com/conventional-changelog/commitlint)
 [![Local SLM](https://img.shields.io/badge/SLM%20Local-Qwen2.5--Coder%201.5B-purple.svg)](https://ollama.com)
-[![Eco-Responsible](https://img.shields.io/badge/Eco--Responsible-0%20RAM%20Idle-brightgreen.svg)](#sobri%C3%A9t%C3%A9-%C3%A9nerg%C3%A9tique--mode-local)
+[![Eco-Responsible](https://img.shields.io/badge/Eco--Responsible-0%20RAM%20Idle-brightgreen.svg)](#guide-de-s%C3%A9lection-dun-slm--llm-alternatif)
 [![Compatibility](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows%20(Git%20Bash)-lightgrey.svg)](#pr%C3%A9requis--installation-des-d%C3%A9pendances-par-syst%C3%A8me)
 
 **Git Tasks-Time Machine (GTM)** est un orchestrateur Git et planificateur de commits atomiques. Il permet de rejouer ou de reconstruire un historique de commits professionnel, cohérent et réaliste, soit à partir d'un fichier de plan JSON prédéfini, soit automatiquement via un modèle de langage compact local (**SLM Qwen2.5-Coder 1.5B** via Ollama).
@@ -13,31 +13,46 @@ Il **n'invente jamais de commits** : il inspecte en profondeur la sémantique de
 
 ---
 
-## 🧭 Sommaire
+## Sommaire
 
-- [Pourquoi utiliser GTM ?](#-pourquoi-utiliser-gtm-)
-- [Cycle de vie GTM (Workflow)](#-cycle-de-vie-gtm-workflow)
-- [Prérequis & Installation des dépendances par système](#-pr%C3%A9requis--installation-des-d%C3%A9pendances-par-syst%C3%A8me)
-- [Installation globale de GTM](#-installation-globale-de-gtm)
-- [Démarrage rapide en 30 secondes](#-d%C3%A9marrage-rapide-en-30-secondes)
-- [Guide des commandes](#-guide-des-commandes)
-  - [`gtm doctor` (Diagnostic de l'environnement)](#1-gtm-doctor--diagnostic-de-lenvironnement)
-  - [`gtm model` (Sélection & configuration du modèle SLM par défaut)](#2-gtm-model--s%C3%A9lection--configuration-du-mod%C3%A8le-slm-par-d%C3%A9faut)
-  - [`gtm lang` (Configuration de la langue des commits)](#3-gtm-lang--configuration-de-la-langue-des-commits)
-  - [`gtm plan` (Génération intelligente via SLM)](#4-gtm-plan--g%C3%A9n%C3%A9ration-intelligente-par-slm-local)
-  - [`gtm validate` (Validation stricte & chronologique)](#5-gtm-validate--contr%C3%B4le-qualit%C3%A9--chronologique)
-  - [`gtm dry-run` (Simulation visuelle transparente)](#6-gtm-dry-run--simulation-sans-toucher-%C3%A0-git)
-  - [`gtm run` (Exécution réelle dans Git)](#7-gtm-run--application-chirurgicale-dans-git)
-  - [`gtm test` (Suite de tests automatisés TDD)](#8-gtm-test--suite-de-tests-automatis%C3%A9s-tdd)
-  - [`gtm update` (Mise à jour automatique)](#9-gtm-update--mise-%C3%A0-jour-du-programme)
-- [Guide de sélection d'un SLM / LLM alternatif](#-guide-de-s%C3%A9lection-dun-slm--llm-alternatif)
-- [Format du plan (`commit-plan.json`)](#-format-du-plan-commit-planjson)
-- [Exemple réel de commit généré](#-exemple-r%C3%A9el-de-commit-g%C3%A9n%C3%A9r%C3%A9)
-- [Agents IA & Intégration automatisée](#-agents-ia--int%C3%A9gration-automatis%C3%A9e)
+- [Git Tasks-Time Machine (GTM)](#git-tasks-time-machine-gtm)
+  - [Sommaire](#sommaire)
+  - [Pourquoi utiliser GTM ?](#pourquoi-utiliser-gtm-)
+  - [Cycle de vie GTM (Workflow)](#cycle-de-vie-gtm-workflow)
+  - [Prérequis \& Installation des dépendances par système](#prérequis--installation-des-dépendances-par-système)
+    - [macOS (Homebrew)](#macos-homebrew)
+    - [Linux — Ubuntu / Debian / Mint](#linux--ubuntu--debian--mint)
+    - [Linux — Fedora / RHEL](#linux--fedora--rhel)
+    - [Linux — Arch Linux](#linux--arch-linux)
+    - [Windows (via Git Bash \& Winget)](#windows-via-git-bash--winget)
+  - [Installation globale de GTM](#installation-globale-de-gtm)
+  - [Démarrage rapide en 30 secondes](#démarrage-rapide-en-30-secondes)
+  - [Guide des commandes](#guide-des-commandes)
+    - [1) `gtm doctor` — Diagnostic de l'environnement](#1-gtm-doctor--diagnostic-de-lenvironnement)
+    - [2) `gtm model` — Sélection \& configuration du modèle SLM par défaut](#2-gtm-model--sélection--configuration-du-modèle-slm-par-défaut)
+    - [3) `gtm lang` — Configuration de la langue des commits](#3-gtm-lang--configuration-de-la-langue-des-commits)
+    - [3b) `gtm timeout` — Configuration du délai d'inférence SLM](#3b-gtm-timeout--configuration-du-délai-dinférence-slm)
+    - [4) `gtm plan` — Génération intelligente par SLM local](#4-gtm-plan--génération-intelligente-par-slm-local)
+      - [Options :](#options-)
+      - [Exemples :](#exemples-)
+    - [5) `gtm validate` — Contrôle qualité \& chronologique](#5-gtm-validate--contrôle-qualité--chronologique)
+    - [6) `gtm dry-run` — Simulation sans toucher à Git](#6-gtm-dry-run--simulation-sans-toucher-à-git)
+    - [7) `gtm run` — Application chirurgicale \& idempotente dans Git](#7-gtm-run--application-chirurgicale--idempotente-dans-git)
+      - [Options :](#options--1)
+    - [8) `gtm test` — Suite de tests automatisés (TDD)](#8-gtm-test--suite-de-tests-automatisés-tdd)
+    - [9) `gtm update` — Mise à jour du programme](#9-gtm-update--mise-à-jour-du-programme)
+  - [Guide de sélection d'un SLM / LLM alternatif](#guide-de-sélection-dun-slm--llm-alternatif)
+    - [Modèles recommandés :](#modèles-recommandés-)
+  - [Configuration personnalisée (`config.env`)](#configuration-personnalisée-configenv)
+  - [Format du plan (`.gtm/commit-plan.json`)](#format-du-plan-gtmcommit-planjson)
+    - [Règles de conformité :](#règles-de-conformité-)
+  - [Exemple réel de commit généré](#exemple-réel-de-commit-généré)
+  - [Agents IA \& Intégration automatisée](#agents-ia--intégration-automatisée)
+  - [Licence](#licence)
 
 ---
 
-## 💡 Pourquoi utiliser GTM ?
+## Pourquoi utiliser GTM ?
 
 | Situation classique | Solution apportée par GTM |
 | :--- | :--- |
@@ -48,24 +63,25 @@ Il **n'invente jamais de commits** : il inspecte en profondeur la sémantique de
 
 ---
 
-## 🔄 Cycle de vie GTM (Workflow)
+## Cycle de vie GTM (Workflow)
 
 ```mermaid
 flowchart LR
-    A["📂 Fichiers du projet\n(Diff ou --all)"] --> B["🧠 gtm plan\n(SLM Local Qwen 1.5B)"]
-    B --> C["📋 .gtm/commit-plan.json\n(Isolé via .gtm/.gitignore)"]
-    C --> D["🔍 gtm validate\n(Contrôle chronologique)"]
-    D --> E["🧪 gtm dry-run\n(Simulation visuelle)"]
-    E --> F["🚀 gtm run\n(Commits Git réels)"]
+    A["Fichiers du projet\n(Diff ou --all)"] --> B["gtm plan\n(SLM Local Qwen 1.5B)"]
+    B --> C[".gtm/commit-plan.json\n(Isolé via .gtm/.gitignore)"]
+    C --> D["gtm validate\n(Contrôle chronologique)"]
+    D --> E["gtm dry-run\n(Simulation visuelle)"]
+    E --> F["gtm run\n(Commits Git réels)"]
 ```
 
 ---
 
-## 📦 Prérequis & Installation des dépendances par système
+## Prérequis & Installation des dépendances par système
 
 GTM nécessite **Git**, **Bash 3.2+**, **jq** (pour le parsing JSON), **Python 3.9+** et **Ollama** (pour la planification automatique).
 
-### 🍏 macOS (Homebrew)
+### macOS (Homebrew)
+
 ```bash
 # 1. Installer les dépendances système (coreutils fournit gdate recommandé)
 brew install git jq coreutils python ollama
@@ -78,7 +94,8 @@ ollama pull qwen2.5-coder:1.5b
 > [!NOTE]
 > **Cas de la commande `date` sous macOS** : Le `/bin/date` natif de macOS est BSD date. GTM s'y adapte automatiquement, mais l'installation de `coreutils` (qui fournit `gdate`) est vivement recommandée pour une précision optimale des conversions ISO 8601.
 
-### 🐧 Linux — Ubuntu / Debian / Mint
+### Linux — Ubuntu / Debian / Mint
+
 ```bash
 # 1. Dépendances système
 sudo apt update && sudo apt install -y git jq coreutils python3 curl
@@ -88,31 +105,36 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama pull qwen2.5-coder:1.5b
 ```
 
-### 🐧 Linux — Fedora / RHEL
+### Linux — Fedora / RHEL
+
 ```bash
 sudo dnf install -y git jq coreutils python3 curl
 curl -fsSL https://ollama.com/install.sh | sh
 ollama pull qwen2.5-coder:1.5b
 ```
 
-### 🐧 Linux — Arch Linux
+### Linux — Arch Linux
+
 ```bash
 sudo pacman -S --noconfirm git jq coreutils python ollama
 sudo systemctl enable --now ollama
 ollama pull qwen2.5-coder:1.5b
 ```
 
-### 🪟 Windows (via Git Bash & Winget)
+### Windows (via Git Bash & Winget)
+
 Dans un terminal **PowerShell** (Administrateur) :
+
 ```powershell
 winget install jqlang.jq Python.Python.3.12 Ollama.Ollama Git.Git
 ollama pull qwen2.5-coder:1.5b
 ```
+
 *(Git Bash fournit nativement Bash, Git et GNU `date`)*.
 
 ---
 
-## 🚀 Installation globale de GTM
+## Installation globale de GTM
 
 Le script s'installe **une seule fois** globalement sur votre machine :
 
@@ -125,6 +147,7 @@ bash ~/Git_Tasks-Time_Machine/install.sh
 ```
 
 `install.sh` :
+
 - Rend `gtm.sh` et les modules `lib/*.sh` exécutables.
 - Crée un lien symbolique `gtm` dans `~/.local/bin` (ou `~/bin`).
 - Détecte automatiquement votre shell (**`~/.zshrc`** sous macOS/zsh ou **`~/.bashrc`** sous Linux) et ajoute le dossier au `PATH` si nécessaire.
@@ -134,7 +157,7 @@ Ouvrez un nouveau terminal ou tapez `source ~/.zshrc` (ou `source ~/.bashrc`).
 
 ---
 
-## ⚡ Démarrage rapide en 30 secondes
+## Démarrage rapide en 30 secondes
 
 Placez-vous dans le dépôt de votre projet et lancez :
 
@@ -156,14 +179,18 @@ gtm run
 
 ---
 
-## 🛠️ Guide des commandes
+## Guide des commandes
 
 ### 1) `gtm doctor` — Diagnostic de l'environnement
+
 Vérifie en un instant l'état complet de votre machine :
+
 ```bash
 gtm doctor
 ```
+
 Vérifie la présence et la version de :
+
 - Shell Bash, Git CLI, `jq`
 - Moteur de dates (`GNU date`, `gdate` ou `BSD date`)
 - Python 3
@@ -173,6 +200,7 @@ Vérifie la présence et la version de :
 ---
 
 ### 2) `gtm model` — Sélection & configuration du modèle SLM par défaut
+
 Permet de choisir interactivement parmi les modèles disponibles sur votre machine ou d'affecter un modèle par défaut stocké de manière persistante dans le fichier `config.env` :
 
 ```bash
@@ -191,6 +219,7 @@ Le modèle sélectionné est automatiquement utilisé par `gtm plan` sans avoir 
 ---
 
 ### 3) `gtm lang` — Configuration de la langue des commits
+
 Permet de définir ou de consulter la langue par défaut utilisée pour la rédaction des messages de commit (sujet et description technique). La langue est enregistrée de manière persistante dans `config.env` :
 
 ```bash
@@ -208,6 +237,7 @@ gtm config lang es
 ```
 
 ### 3b) `gtm timeout` — Configuration du délai d'inférence SLM
+
 Gère le délai d'attente accordé aux requêtes d'inférence Ollama (défaut : `180` secondes) pour s'adapter aux machines à ressources modérées ou aux gros volumes de fichiers :
 
 ```bash
@@ -227,6 +257,7 @@ gtm config timeout 300
 ---
 
 ### 4) `gtm plan` — Génération intelligente par SLM local
+
 Analyse l'arborescence, applique 100% des règles `.gitignore` natives du projet, extrait la sémantique technique réelle et fait appel au SLM local sobre configuré pour structurer un plan de commits atomiques.
 
 ```bash
@@ -234,6 +265,7 @@ gtm plan [options] [chemin/vers/plan.json]
 ```
 
 #### Options :
+
 - `-a`, `--all` : analyse l'ensemble des fichiers du projet (au lieu de se limiter aux modifications `git status`).
 - `-l`, `--lang <code>` : force la langue des messages pour cette exécution (`en`, `fr`, `es`, `de`, `it`, `pt`, etc. - types standard toujours en anglais).
 - `--dry-run` : affiche le plan généré dans le terminal sans créer de fichier sur le disque.
@@ -242,6 +274,7 @@ gtm plan [options] [chemin/vers/plan.json]
 - `-m`, `--model <nom>` : sélectionne un modèle Ollama alternatif (défaut: `qwen2.5-coder:1.5b`).
 
 #### Exemples :
+
 ```bash
 # Planifier uniquement les fichiers modifiés récemment
 gtm plan
@@ -259,11 +292,15 @@ gtm plan -a --dry-run -m qwen2.5-coder:7b
 ---
 
 ### 5) `gtm validate` — Contrôle qualité & chronologique
+
 Valide la structure du fichier de plan sans modifier Git :
+
 ```bash
 gtm validate [chemin/vers/plan.json]
 ```
+
 Contrôles stricts effectués :
+
 - JSON syntaxiquement valide.
 - Dates au format ISO 8601 strict.
 - **Ordre chronologique strictement croissant** (garantit que l'historique Git n'a pas de retours en arrière anachroniques).
@@ -273,11 +310,15 @@ Contrôles stricts effectués :
 ---
 
 ### 6) `gtm dry-run` — Simulation sans toucher à Git
+
 Affiche le déroulé exact de ce qui sera appliqué dans Git :
+
 ```bash
 gtm dry-run [chemin/vers/plan.json]
 ```
+
 Pour chaque commit :
+
 - Numéro d'ordre et date programmée.
 - Message complet (sujet Conventional Commits + description technique détaillée).
 - Fichiers réellement ciblés après expansion des motifs glob.
@@ -285,11 +326,15 @@ Pour chaque commit :
 ---
 
 ### 7) `gtm run` — Application chirurgicale & idempotente dans Git
+
 Exécute chronologiquement les commits dans le dépôt courant avec suivi d'état, reprise après coupure et archivage automatique :
+
 ```bash
 gtm run [options] [chemin/vers/plan.json]
 ```
+
 Pour chaque entrée du plan :
+
 1. `git reset` (nettoie l'index staging sans toucher à vos fichiers).
 2. Vérifie si le commit a déjà été appliqué (`status: "applied"`) pour éviter tout doublon.
 3. `git add -- <fichiers>` (indexe strictement les fichiers du commit).
@@ -299,16 +344,20 @@ Pour chaque entrée du plan :
 7. Dès que le plan est 100% appliqué, archive automatiquement une copie dans `.gtm/history/commit-plan-YYYYMMDD_HHMMSS.json`.
 
 #### Options :
+
 - `--force` : force la ré-exécution de tous les commits, même ceux déjà marqués comme appliqués.
 - `--reset` : réinitialise l'état d'exécution du plan en retirant les marqueurs `status` et `commit_hash`.
 
 ---
 
 ### 8) `gtm test` — Suite de tests automatisés (TDD)
-Exécute l'ensemble de la batterie de tests unitaires (Python standard library `unittest`) et des tests d'intégration en bac à sable Git isolé :
+
+Exécute l'ensemble de la batterie de tests unitaires (Python standard library `unittest`) et des tests d'intégration en bac à sable Git isolé 
+
 ```bash
 gtm test
 ```
+
 - **Tests unitaires Python** : validation de la normalisation des en-têtes Conventional Commits, déduplication, réconciliation des orphelins, tri chronologique strict.
 - **Tests d'intégration Shell** : validation de conformité des plans (`gtm validate`), simulation étanche (`gtm dry-run`), exécution réelle (`gtm run`), persistance de la configuration (`gtm model`, `gtm lang`).
 - **Garantie zéro régression** : exécution rapide en quelques secondes, sans dépendance pip ou npm externe.
@@ -316,7 +365,9 @@ gtm test
 ---
 
 ### 9) `gtm update` — Mise à jour du programme
+
 Met à jour GTM directement depuis le dépôt officiel :
+
 ```bash
 gtm update
 # Alias disponibles :
@@ -325,12 +376,13 @@ gtm -update
 gtm --u
 gtm -u
 ```
+
 - Si GTM a été cloné via Git : effectue un `git pull` fast-forward propre.
 - Sinon : télécharge la dernière version stable via `curl` ou `wget`.
 
 ---
 
-## 🧠 Guide de sélection d'un SLM / LLM alternatif
+## Guide de sélection d'un SLM / LLM alternatif
 
 GTM utilise par défaut **Qwen2.5-Coder 1.5B**, choisi pour son **efficacité énergétique exemplaire** (tourne sur n'importe quel CPU en quelques secondes, consomme moins de 1 Go de RAM et se décharge immédiatement grâce à `keep_alive: 0`).
 
@@ -346,16 +398,17 @@ Si vous souhaitez utiliser un autre modèle via `gtm plan -m <nom>`, respectez c
    - *GPU dédié ou Mac Apple Silicon (≥ 16 Go)* : Modèles **7B à 14B**.
 
 ### Modèles recommandés :
-| Modèle Ollama | Poids | Recommandation | Cas d'usage |
+
+| Modèle Ollama | Poids | Statut | Cas d'usage |
 | :--- | :--- | :--- | :--- |
-| **`qwen2.5-coder:1.5b`** | **~1.0 Go** | ⭐ **Recommandé par défaut** | Léger, rapide, tourne partout (même sur PC bureautique). |
-| **`qwen2.5-coder:7b`** | ~4.7 Go | ⭐⭐ **Excellente précision** | Idéal si vous disposez d'un GPU ou d'un Mac M-series. |
-| **`deepseek-coder:1.3b`** | ~0.9 Go | Alternative légère | Très bonne adhérence au code source. |
-| **`llama3.2:3b`** | ~2.0 Go | Généraliste compact | Polyvalent pour les dépôts à forte composante documentaire. |
+| **`qwen2.5-coder:1.5b`** | **~1.0 Go** | `◈ Recommandé par défaut` | Léger, rapide, tourne partout (même sur PC bureautique). |
+| **`qwen2.5-coder:7b`** | ~4.7 Go | `◈ Haute précision` | Idéal si vous disposez d'un GPU ou d'un Mac M-series. |
+| **`deepseek-coder:1.3b`** | ~0.9 Go | `Alternative légère` | Très bonne adhérence au code source. |
+| **`llama3.2:3b`** | ~2.0 Go | `Généraliste compact` | Polyvalent pour les dépôts à forte composante documentaire. |
 
 ---
 
-## ⚙️ Configuration personnalisée (`config.env`)
+## Configuration personnalisée (`config.env`)
 
 Le fichier `config.env` situé à la racine de GTM vous permet de personnaliser l'environnement selon vos contraintes d'infrastructure ou de sécurité :
 
@@ -380,7 +433,7 @@ OLLAMA_HOST="http://localhost:11434"
 
 ---
 
-## 📋 Format du plan (`.gtm/commit-plan.json`)
+## Format du plan (`.gtm/commit-plan.json`)
 
 Le plan JSON décrit la séquence des commits à exécuter. Par défaut, il est généré dans `.gtm/commit-plan.json` et isolé par un fichier `.gtm/.gitignore` (`*`) pour ne laisser aucun résidu dans votre dépôt Git cible :
 
@@ -400,15 +453,16 @@ Le plan JSON décrit la séquence des commits à exécuter. Par défaut, il est 
 ```
 
 ### Règles de conformité :
+
 - `date` : Timestamp ISO 8601 complet avec fuseau horaire (ex: `2026-10-16T14:30:00+01:00`).
 - `message` : L'en-tête doit respecter le format `<type>(<scope>): <sujet>` en minuscules, suivi d'une ligne vide `\n\n` et d'une description technique détaillée.
 - `files` : Chemins relatifs au dossier courant ou glob patterns (`src/**/*.ts`).
 
-👉 Pour la spécification formelle complète et le schéma JSON Draft-07 / 2020-12, consultez **[docs/commit-plan-spec.md](docs/commit-plan-spec.md)**.
+→ Pour la spécification formelle complète et le schéma JSON Draft-07 / 2020-12, consultez **[docs/commit-plan-spec.md](docs/commit-plan-spec.md)**.
 
 ---
 
-## 🔍 Exemple réel de commit généré
+## Exemple réel de commit généré
 
 Voici un exemple concret de commit produit automatiquement par `gtm plan` sur une API d'entreprise :
 
@@ -428,14 +482,15 @@ Implement POST /webServTiers/save endpoints in the formalites folder.
 
 ---
 
-## 🤖 Agents IA & Intégration automatisée
+## Agents IA & Intégration automatisée
 
 Si vous utilisez des agents d'intelligence artificielle (**Claude Code**, **Cursor**, **Copilot Workspace**, **Antigravity**, **Devin**) pour manipuler votre dépôt, consultez le guide dédié :
 
-👉 **[AGENTS.md](AGENTS.md)** : Contrats d'interfaces non-interactifs, codes d'erreur, invariants de sécurité et directives d'automatisation.
+> [!TIP]
+> **Directives pour Agents Autonomes** : Consultez **[AGENTS.md](AGENTS.md)** pour les contrats d'interfaces non-interactifs, codes d'erreur, invariants de sécurité et directives d'automatisation.
 
 ---
 
-## 📄 Licence
+## Licence
 
 Ce projet est sous licence **MIT** — voir le fichier [LICENSE](LICENSE) pour plus de détails.
