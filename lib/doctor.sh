@@ -90,6 +90,7 @@ doctor_check_all() {
     fi
 
     printf "• Langue commits  : %s [active dans config.env]\n" "${DEFAULT_LANG:-en}"
+    printf "• Timeout SLM     : %ss [actif dans config.env]\n" "${OLLAMA_TIMEOUT:-180}"
 
     echo
     # 6. Contexte courant

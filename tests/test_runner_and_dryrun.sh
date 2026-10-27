@@ -40,6 +40,20 @@ assert_exit_code() {
     fi
 }
 
+assert_equals() {
+    local test_name="$1"
+    local expected="$2"
+    local actual="$3"
+
+    if [[ "$expected" == "$actual" ]]; then
+        printf "  \033[0;32m✔\033[0m %s (valeur: '%s')\n" "$test_name" "$actual"
+        PASSED=$((PASSED + 1))
+    else
+        printf "  \033[0;31m✘\033[0m %s (attendu: '%s', obtenu: '%s')\n" "$test_name" "$expected" "$actual"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
 echo "=== Exécution des tests pour 'gtm dry-run' et 'gtm run' ==="
 
 cat <<EOF > test_plan.json
@@ -107,6 +121,34 @@ else
     FAILED=$((FAILED + 1))
 fi
 
+# 2b. Test de suivi d'état, idempotence et anti-répétition des commits
+applied_status_1=$(jq -r '.commits[0].status // empty' test_plan.json)
+assert_equals "Commit #1 marqué comme 'applied' dans le JSON" "applied" "$applied_status_1"
+
+hash_1=$(jq -r '.commits[0].commit_hash // empty' test_plan.json)
+if [[ -n "$hash_1" && "$hash_1" != "null" ]]; then
+    printf "  \033[0;32m✔\033[0m Hash git réel enregistré sur Commit #1 (%s)\n" "$hash_1"
+    PASSED=$((PASSED + 1))
+else
+    printf "  \033[0;31m✘\033[0m Aucun commit_hash enregistré dans le JSON\n"
+    FAILED=$((FAILED + 1))
+fi
+
+# Deuxième exécution : doit détecter que tout a déjà été appliqué (zéro commit dupliqué)
+assert_exit_code "Deuxième exécution de gtm run termine avec code 0" 0 "$PROJECT_ROOT/gtm.sh" run test_plan.json
+commits_after_2nd=$(git rev-list --count HEAD)
+assert_equals "Aucun commit supplémentaire créé lors du deuxième run" "2" "$commits_after_2nd"
+
+# gtm dry-run sur un plan appliqué indique que tous les commits sont déjà appliqués
+dry_applied_out=$("$PROJECT_ROOT/gtm.sh" dry-run test_plan.json)
+if echo "$dry_applied_out" | grep -q "déjà été appliqués"; then
+    printf "  \033[0;32m✔\033[0m gtm dry-run signale que le plan est déjà appliqué\n"
+    PASSED=$((PASSED + 1))
+else
+    printf "  \033[0;31m✘\033[0m gtm dry-run n'a pas signalé le statut appliqué : %s\n" "$dry_applied_out"
+    FAILED=$((FAILED + 1))
+fi
+
 # 3. Test d'exécution par défaut avec .gtm/commit-plan.json et zéro résidu
 rm -f test_plan.json
 mkdir -p .gtm
@@ -134,6 +176,16 @@ if [[ -z "$gtm_residue" ]]; then
     PASSED=$((PASSED + 1))
 else
     printf "  \033[0;31m✘\033[0m Résidu détecté dans git status : %s\n" "$gtm_residue"
+    FAILED=$((FAILED + 1))
+fi
+
+# Vérifier l'archivage dans .gtm/history/
+history_count=$(ls -1 .gtm/history/commit-plan-*.json 2>/dev/null | wc -l | tr -d ' ')
+if (( history_count >= 1 )); then
+    printf "  \033[0;32m✔\033[0m Plan archivé avec succès dans .gtm/history/ (%d archive(s))\n" "$history_count"
+    PASSED=$((PASSED + 1))
+else
+    printf "  \033[0;31m✘\033[0m Aucune archive trouvée dans .gtm/history/\n"
     FAILED=$((FAILED + 1))
 fi
 

@@ -98,19 +98,35 @@ assert_equals "DEFAULT_LANG persisté dans config.env" "fr" "$val_lang"
 val_lang_es=$(grep "^DEFAULT_LANG=" config.env | cut -d'=' -f2 | tr -d '"')
 assert_equals "Sous-commande config lang persistée" "es" "$val_lang_es"
 
+# 8b. Test gtm timeout & OLLAMA_TIMEOUT configuration
+assert_exit_code "gtm timeout sans argument termine avec 0" 0 ./gtm.sh timeout
+assert_exit_code "gtm timeout avec argument vide échoue" 1 ./gtm.sh timeout ""
+assert_exit_code "gtm timeout --help termine avec 0" 0 ./gtm.sh timeout --help
+assert_exit_code "gtm timeout avec valeur non numérique échoue" 1 ./gtm.sh timeout "abc"
+assert_exit_code "gtm timeout trop petit (< 10) échoue" 1 ./gtm.sh timeout "5"
+./gtm.sh timeout 240 >/dev/null 2>&1
+val_timeout=$(grep "^OLLAMA_TIMEOUT=" config.env | cut -d'=' -f2 | tr -d '"')
+assert_equals "OLLAMA_TIMEOUT persisté dans config.env" "240" "$val_timeout"
+
+./gtm.sh config timeout 300 >/dev/null 2>&1
+val_timeout_cfg=$(grep "^OLLAMA_TIMEOUT=" config.env | cut -d'=' -f2 | tr -d '"')
+assert_equals "Sous-commande config timeout persistée" "300" "$val_timeout_cfg"
+
 # 9. Test fallback config.env.example quand config.env est absent
 rm -f config.env
 cat <<EOF > config.env.example
 DEFAULT_MODEL="qwen2.5-coder:7b"
 OLLAMA_HOST="http://localhost:11434"
 DEFAULT_LANG="de"
+OLLAMA_TIMEOUT="210"
 EOF
 
 # Réinitialiser les variables exportées pour tester le rechargement propre
-unset DEFAULT_MODEL DEFAULT_LANG
+unset DEFAULT_MODEL DEFAULT_LANG OLLAMA_TIMEOUT
 config_init "$PWD/gtm.sh"
 assert_equals "Fallback DEFAULT_MODEL depuis config.env.example" "qwen2.5-coder:7b" "$DEFAULT_MODEL"
 assert_equals "Fallback DEFAULT_LANG depuis config.env.example" "de" "$DEFAULT_LANG"
+assert_equals "Fallback OLLAMA_TIMEOUT depuis config.env.example" "210" "$OLLAMA_TIMEOUT"
 
 # 10. Test que gtm model crée config.env à partir de config.env.example sans altérer le template
 ./gtm.sh model smollm:360m >/dev/null 2>&1

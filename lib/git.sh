@@ -44,3 +44,12 @@ git_create_commit() {
 $commit_message
 EOF
 }
+
+git_get_head_hash() {
+    local short="${1:-true}"
+    if [[ "$short" == "true" ]]; then
+        git rev-parse --short HEAD 2>/dev/null || echo ""
+    else
+        git rev-parse HEAD 2>/dev/null || echo ""
+    fi
+}

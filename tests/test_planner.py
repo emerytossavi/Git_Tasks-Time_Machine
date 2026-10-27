@@ -216,6 +216,35 @@ class TestPlannerUnit(unittest.TestCase):
             else:
                 os.environ.pop("OLLAMA_BASE_URL", None)
 
+    def test_get_configured_ollama_timeout(self):
+        """Vérifie la lecture et les fallbacks du timeout Ollama."""
+        old_timeout = os.environ.get("OLLAMA_TIMEOUT")
+        old_gtm_timeout = os.environ.get("GTM_TIMEOUT")
+        try:
+            # 1. Surcharge via OLLAMA_TIMEOUT
+            os.environ["OLLAMA_TIMEOUT"] = "240"
+            self.assertEqual(planner.get_configured_ollama_timeout(), 240)
+
+            # 2. Surcharge via GTM_TIMEOUT
+            os.environ.pop("OLLAMA_TIMEOUT", None)
+            os.environ["GTM_TIMEOUT"] = "360"
+            self.assertEqual(planner.get_configured_ollama_timeout(), 360)
+
+            # 3. Valeur invalide ou aberrante (repli sécurisé)
+            os.environ["OLLAMA_TIMEOUT"] = "invalid"
+            self.assertEqual(planner.get_configured_ollama_timeout(), 180)
+            os.environ["OLLAMA_TIMEOUT"] = "3"
+            self.assertEqual(planner.get_configured_ollama_timeout(), 10)
+        finally:
+            if old_timeout is not None:
+                os.environ["OLLAMA_TIMEOUT"] = old_timeout
+            else:
+                os.environ.pop("OLLAMA_TIMEOUT", None)
+            if old_gtm_timeout is not None:
+                os.environ["GTM_TIMEOUT"] = old_gtm_timeout
+            else:
+                os.environ.pop("GTM_TIMEOUT", None)
+
     def test_classify_model(self):
         """Vérifie la qualification honnête et dynamique du modèle selon sa taille réelle."""
         # 1. Modèles SLM sobres (<= 3.5B ou en Millions de paramètres)

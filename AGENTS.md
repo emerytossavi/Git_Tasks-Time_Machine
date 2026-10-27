@@ -94,16 +94,28 @@ gtm dry-run
 gtm dry-run .gtm/commit-plan.json
 ```
 
-### 3.5. `gtm run [plan.json]`
-Executes atomic staging and commits for each item in the plan:
+### 3.5. `gtm run [options] [plan.json]`
+Executes atomic staging and commits for each item in the plan with built-in state tracking, idempotence, crash-resilience, and history archiving:
 - Sets `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` per commit.
 - Stages exact file lists using `git add -A -- <files>` (safely capturing additions, modifications, and deletions).
 - Creates commits via `git commit -m "<message>"`.
+- Records `"status": "applied"`, `"commit_hash": "<hash>"`, and `"applied_at"` in-place in the plan JSON after each successful commit.
+- Automatically skips already-applied commits on subsequent runs (guaranteeing zero duplicate commits).
+- Automatically archives a snapshot of the fully applied plan into `.gtm/history/commit-plan-YYYYMMDD_HHMMSS.json` (protected by `.gtm/.gitignore`).
+- Options:
+  - `--force`: Force re-execution of commits even if already marked as applied.
+  - `--reset`: Reset all execution statuses in the plan file.
 
 ```bash
+# Execute plan idempotently
 gtm run
-# Or specify a custom plan
+
+# Execute a custom plan
 gtm run .gtm/commit-plan.json
+
+# Force re-execution or reset plan statuses
+gtm run --force
+gtm run --reset
 ```
 
 ### 3.6. `gtm model [model_name|--list]`
@@ -135,7 +147,21 @@ gtm lang en
 - **Exit 0**: Language successfully displayed or saved.
 - **Exit 1**: Missing language code.
 
-### 3.8. `gtm test`
+### 3.8. `gtm timeout [seconds]`
+Inspects or persistently configures the Ollama inference timeout in `config.env` (default: 180s):
+
+```bash
+# Show active inference timeout
+gtm timeout
+
+# Set default inference timeout in seconds (writes OLLAMA_TIMEOUT to config.env)
+gtm timeout 240
+gtm timeout 300
+```
+- **Exit 0**: Timeout successfully displayed or saved.
+- **Exit 1**: Missing or invalid timeout value (< 10).
+
+### 3.9. `gtm test`
 Executes the comprehensive automated TDD test suite (Python `unittest` and isolated Shell sandboxes):
 - Planner unit tests (sanitization, reconciliation, monotonicity, configuration, languages).
 - Validator integration tests (valid plans, missing files, malformed JSON, dates).

@@ -207,6 +207,18 @@ gtm lang fr
 gtm config lang es
 ```
 
+### 3b) `gtm timeout` — Configuration du délai d'inférence SLM
+Gère le délai d'attente accordé aux requêtes d'inférence Ollama (défaut : `180` secondes) pour s'adapter aux machines à ressources modérées ou aux gros volumes de fichiers :
+
+```bash
+# Afficher le timeout actif :
+gtm timeout
+
+# Configurer un timeout personnalisé (ex: 240s ou 300s) :
+gtm timeout 240
+gtm config timeout 300
+```
+
 > [!IMPORTANT]
 > **Universalité des types Conventional Commits** :  
 > Quelle que soit la langue sélectionnée (`en`, `fr`, `es`, `de`, `it`, etc.), les **mots-clés de type (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, etc.) restent toujours en anglais standard** conformément à la spécification Conventional Commits v1.0.0. Seuls le résumé et le corps explicatif sont traduits et rédigés dans la langue choisie.
@@ -272,16 +284,23 @@ Pour chaque commit :
 
 ---
 
-### 7) `gtm run` — Application chirurgicale dans Git
-Exécute chronologiquement les commits dans le dépôt courant :
+### 7) `gtm run` — Application chirurgicale & idempotente dans Git
+Exécute chronologiquement les commits dans le dépôt courant avec suivi d'état, reprise après coupure et archivage automatique :
 ```bash
-gtm run [chemin/vers/plan.json]
+gtm run [options] [chemin/vers/plan.json]
 ```
 Pour chaque entrée du plan :
 1. `git reset` (nettoie l'index staging sans toucher à vos fichiers).
-2. `git add -- <fichiers>` (indexe strictement les fichiers du commit).
-3. Injecte le message complet via flux heredoc pour préserver fidèlement les sauts de ligne `\n\n`.
-4. Applique la date avec synchronisation de `GIT_COMMITTER_DATE` et `git commit --date`.
+2. Vérifie si le commit a déjà été appliqué (`status: "applied"`) pour éviter tout doublon.
+3. `git add -- <fichiers>` (indexe strictement les fichiers du commit).
+4. Injecte le message complet via flux heredoc pour préserver fidèlement les sauts de ligne `\n\n`.
+5. Applique la date avec synchronisation de `GIT_COMMITTER_DATE` et `git commit --date`.
+6. Enregistre atomiquement le hash Git réel généré et l'état `applied` dans le JSON.
+7. Dès que le plan est 100% appliqué, archive automatiquement une copie dans `.gtm/history/commit-plan-YYYYMMDD_HHMMSS.json`.
+
+#### Options :
+- `--force` : force la ré-exécution de tous les commits, même ceux déjà marqués comme appliqués.
+- `--reset` : réinitialise l'état d'exécution du plan en retirant les marqueurs `status` et `commit_hash`.
 
 ---
 

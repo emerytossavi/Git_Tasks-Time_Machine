@@ -15,6 +15,7 @@ import subprocess
 from datetime import datetime, timedelta, time
 from pathlib import Path
 import random
+import socket
 
 SYSTEM_EXCLUDES = {
     ".git",
@@ -676,10 +677,20 @@ def get_configured_default_lang() -> str:
     """Récupère la langue configurée dans l'environnement (DEFAULT_LANG) ou dans config.env / config.env.example (défaut: 'en')."""
     return read_config_var(["DEFAULT_LANG"], fallback="en").lower()
 
-def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url=None, target_lang="en"):
+def get_configured_ollama_timeout() -> int:
+    """Récupère le timeout d'inférence Ollama configuré en secondes (défaut: 180s)."""
+    raw = read_config_var(["OLLAMA_TIMEOUT", "GTM_TIMEOUT"], fallback="180")
+    try:
+        val = int(raw.strip())
+        return max(10, val)
+    except Exception:
+        return 180
+
+def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b", base_url=None, target_lang="en", timeout=None):
     """Appelle Ollama avec sortie JSON contrainte, types standards et langue configurée."""
     base_url = (base_url or get_configured_ollama_host()).rstrip("/")
     url = f"{base_url}/api/chat"
+    timeout = timeout if timeout is not None else get_configured_ollama_timeout()
 
     id_key = "module_ids" if is_modular else "file_ids"
     example_id = "[1, 2]" if is_modular else "[1, 2]"
@@ -803,7 +814,7 @@ def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b
         "keep_alive": 0,
         "options": {
             "temperature": 0.1,
-            "num_ctx": 8192,
+            "num_ctx": 4096,
             "num_predict": 2500
         }
     }
@@ -812,15 +823,30 @@ def call_ollama(prompt_content: str, is_modular=False, model="qwen2.5-coder:1.5b
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     
     try:
-        with urllib.request.urlopen(req, timeout=90) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = json.loads(resp.read().decode("utf-8"))
             content = body.get("message", {}).get("content", "{}")
             return json.loads(content)
+    except (TimeoutError, socket.timeout) as e:
+        print(f"\033[0;31m[ERROR]\033[0m Délai d'inférence Ollama dépassé ({timeout}s) : {e}", file=sys.stderr)
+        print("Le modèle local a pris plus de temps que la limite autorisée pour générer le plan.", file=sys.stderr)
+        print(f"Vous pouvez augmenter ce délai avec OLLAMA_TIMEOUT (ex: export OLLAMA_TIMEOUT={timeout * 2}) ou via 'gtm timeout {timeout * 2}'.", file=sys.stderr)
+        sys.exit(1)
     except urllib.error.URLError as e:
+        reason = getattr(e, "reason", None)
+        if isinstance(reason, (socket.timeout, TimeoutError)) or "timed out" in str(e).lower():
+            print(f"\033[0;31m[ERROR]\033[0m Délai d'inférence Ollama dépassé ({timeout}s) : {e}", file=sys.stderr)
+            print("Le modèle local a pris plus de temps que la limite autorisée pour générer le plan.", file=sys.stderr)
+            print(f"Vous pouvez augmenter ce délai avec OLLAMA_TIMEOUT (ex: export OLLAMA_TIMEOUT={timeout * 2}) ou via 'gtm timeout {timeout * 2}'.", file=sys.stderr)
+            sys.exit(1)
         print(f"\033[0;31m[ERROR]\033[0m Impossible de joindre Ollama ({base_url}) : {e}", file=sys.stderr)
         print("Vérifiez qu'Ollama est démarré avec 'ollama serve' ou lancez l'application Ollama.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
+        if "timed out" in str(e).lower():
+            print(f"\033[0;31m[ERROR]\033[0m Délai d'inférence Ollama dépassé ({timeout}s) : {e}", file=sys.stderr)
+            print(f"Vous pouvez augmenter ce délai avec OLLAMA_TIMEOUT (ex: export OLLAMA_TIMEOUT={timeout * 2}) ou via 'gtm timeout {timeout * 2}'.", file=sys.stderr)
+            sys.exit(1)
         print(f"\033[0;31m[ERROR]\033[0m Échec lors du parsing de la réponse LLM : {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -1271,6 +1297,7 @@ def main():
     default_model = get_configured_default_model()
     default_host = get_configured_ollama_host()
     default_lang = get_configured_default_lang()
+    default_timeout = get_configured_ollama_timeout()
     parser = argparse.ArgumentParser(description=f"Générateur sobre de commit-plan.json via SLM local (défaut: {default_model}).")
     parser.add_argument("plan_file", nargs="?", default=".gtm/commit-plan.json", help="Fichier de sortie (défaut: .gtm/commit-plan.json)")
     parser.add_argument("-o", "--output", default=None, help="Chemin alternatif du fichier de sortie")
@@ -1278,6 +1305,7 @@ def main():
     parser.add_argument("-m", "--model", default=default_model, help=f"Modèle Ollama (défaut configuré: {default_model})")
     parser.add_argument("-l", "--lang", default=default_lang, help=f"Langue des messages de commit (défaut configuré: {default_lang})")
     parser.add_argument("--ollama-host", default=default_host, help=f"Hôte du serveur Ollama (défaut: {default_host})")
+    parser.add_argument("--timeout", type=int, default=None, help=f"Timeout d'inférence Ollama en secondes (défaut configuré: {default_timeout}s)")
     parser.add_argument("--start-date", default=None, help="Date de départ ISO (ex: 2026-10-10T09:00:00)")
     parser.add_argument("--date-strategy", choices=["last", "first"], default="last", help="Dater selon le 'last' (dernier fichier modifié, défaut) ou 'first' (premier)")
     parser.add_argument("--dry-run", action="store_true", help="Afficher le plan généré sans modifier de fichier")
@@ -1301,8 +1329,8 @@ def main():
 
     analyses_dict = {fa["path"]: fa for fa in analyses}
 
-    # Stratégie hybride : si plus de 12 fichiers, regrouper par sous-dossier/module logique
-    is_modular = len(files) > 12
+    # Stratégie hybride : si plus de 6 fichiers, regrouper par sous-dossier/module logique
+    is_modular = len(files) > 6
     id_map = {}
 
     if is_modular:
@@ -1375,7 +1403,7 @@ def main():
     model_kind = get_model_qualification(args.model, base_url=args.ollama_host)
     lang_name = get_language_name(args.lang)
     print(f"\033[0;34m[INFO]\033[0m Inférence via {model_kind} '{args.model}' (mode: {'modulaire' if is_modular else 'fichiers'}, langue: {lang_name})...")
-    res = call_ollama(prompt, is_modular=is_modular, model=args.model, base_url=args.ollama_host, target_lang=args.lang)
+    res = call_ollama(prompt, is_modular=is_modular, model=args.model, base_url=args.ollama_host, target_lang=args.lang, timeout=args.timeout)
 
     raw_commits = res.get("commits", [])
     if not raw_commits:
